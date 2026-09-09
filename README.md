@@ -26,6 +26,7 @@ npm run typecheck   # app + server
 npm run build       # production bundle in dist/ (npm start serves it with the API)
 npm run build:single# ONE self-contained HTML file in dist-single/index.html
 npm run e2e         # Playwright smoke test with screenshots in e2e/screenshots/
+                    # (set PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome to reuse an installed Chromium)
 ```
 
 The single-file build can be opened straight from disk or emailed. Its AI features work in "browser key" mode (paste your Anthropic API key under Ask AI → settings; the key is stored only in your browser's localStorage).
@@ -43,7 +44,7 @@ The single-file build can be opened straight from disk or emailed. Its AI featur
 
 - Final salary = average pensionable salary over the last 24 months.
 - 10+ years' service: gratuity = 6.72% × final salary × service; annuity = final salary × service ÷ 55 + R360 a year.
-- Under 10 years: gratuity only (15% × final salary × service).
+- Under 10 years: no pension; the actuarial interest (service × final salary × F(age)) is paid as a once-off gratuity.
 - Early retirement between 55 and 60 without employer approval: ⅓% reduction per month before 60.
 - Resignation at any age: actuarial interest = pensionable service × final salary × age-dependent factor F(age) (GEPF Rule 14.4), using the factors the GEPF introduced on **1 October 2025** (on average ~15% lower than the 2021 factors). The value under the previous factors is shown for comparison.
 - Two-pot split of the actuarial interest: vested (pre-September-2024 accrual, less the 10%/R30,000 seed), savings (seed + ⅓ of later accrual) and retirement (⅔ of later accrual). On resignation you may cash the vested and savings components; the retirement component must be preserved.

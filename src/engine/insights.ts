@@ -24,6 +24,12 @@ function finite(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
+/** `formatRandCompact` stops at billions; fund-level amounts read better in trillions. */
+function bigRand(value: number): string {
+  const v = finite(value)
+  return Math.abs(v) >= 1e12 ? `R${(v / 1e12).toFixed(1)} trillion` : formatRandCompact(v)
+}
+
 function pct(value: number, decimals = 1): string {
   return formatPct(finite(value), decimals)
 }
@@ -338,7 +344,7 @@ export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfR
         `${pct(result.totals.guaranteedIncomeShare)} of your first-year income is a promise by the South African state. The GEPF is ${pct(
           rules.status.fundingLevel,
           0,
-        )} funded at ${rules.status.valuationDate} with ${formatRandCompact(rules.status.assetsRand)} of assets, only ${pct(
+        )} funded at ${rules.status.valuationDate} with ${bigRand(rules.status.assetsRand)} of assets, only ${pct(
           rules.status.offshoreAllocation,
           0,
         )} of them outside South Africa, and it is the single largest holder of SA government debt. Prescribed assets or a debt restructuring would hit this income first.`,
@@ -532,9 +538,11 @@ export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfR
       )} a month against a target of ${formatRand(finite(row?.targetNetIncome) / 12)} — ${formatRand(
         finite(row?.shortfall) / 12,
       )} a month short${
-        row && row.capitalStart > 0 && row.drawdownRate >= a.livingAnnuityMaxDrawdown - 1e-6
+        result.kind !== 'stay-gepf' && row && Math.abs(row.drawdownRate - a.livingAnnuityMaxDrawdown) < 1e-6
           ? `, because the living-annuity drawdown is capped at ${pct(a.livingAnnuityMaxDrawdown)} of capital`
-          : ''
+          : row && row.capitalEnd <= 0.01
+            ? ', because the invested capital is exhausted'
+            : ''
       }. Reduce the target, work longer, or draw less earlier.`,
       appliesTo: [result.kind],
     })

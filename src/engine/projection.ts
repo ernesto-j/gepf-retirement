@@ -578,10 +578,15 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
         lumpSumNet: lst.net,
         intoLivingAnnuity,
       }
+      // The fund itself becomes the living annuity: the sleeves carry over (so the offshore
+      // money already held is not converted a second time) and the yearly rebalance moves the
+      // offshore share from the Regulation 28 cap up to the living annuity's target.
+      withdraw(preservation, gross, usdZar)
+      preservation.kind = 'living-annuity'
+      preservation.name = 'Living annuity'
+      preservation.targetOffshoreShare = livingAnnuityOffshore
       pots.splice(pots.indexOf(preservation), 1)
-      const la = makePot('Living annuity', 'living-annuity', intoLivingAnnuity, livingAnnuityOffshore, usdZar, a.fxConversionCost, fee, false)
-      lifetimeFees += la.fxCost
-      pots.unshift(la.pot)
+      pots.unshift(preservation)
       if (lst.net > 0) {
         const cashPot = makePot('Retirement lump sum invested', 'discretionary', lst.net, fraction(def.offshorePct), usdZar, a.fxConversionCost, fee, true)
         lifetimeFees += cashPot.fxCost

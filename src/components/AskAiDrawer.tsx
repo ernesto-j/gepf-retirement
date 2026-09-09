@@ -6,7 +6,7 @@ import { ContextChips } from './ai/ContextChips'
 import { AiSettingsPanel } from './ai/AiSettingsPanel'
 
 /** Slide-over "Ask AI" panel, opened from the persistent button in the app shell. */
-export default function AskAiDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AskAiDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const page = useAppStore((s) => s.page)
   const clearChat = useAppStore((s) => s.clearChat)
   const { core } = useResults()

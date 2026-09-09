@@ -54,7 +54,12 @@ function PlannerContent() {
   const results = [resultA, resultB].filter((r): r is NonNullable<typeof r> => r !== null)
 
   function selectSlot(slot: Slot, id: string) {
+    const other: Slot = slot === 0 ? 1 : 0
     const next: [string, string] = [...plannerSelection]
+    if (id === next[other]) {
+      // Picking the scenario already in the other slot would duplicate chart series; swap instead.
+      next[other] = next[slot]
+    }
     next[slot] = id
     setPlannerSelection(next)
   }

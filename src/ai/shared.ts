@@ -234,6 +234,22 @@ export const STATEMENT_SCHEMA = {
   additionalProperties: false,
 } as const
 
+/**
+ * Parses the raw JSON text the model returns for a statement extraction (matching
+ * `STATEMENT_SCHEMA`) into a `GepfStatementValues`, folding `extractionNotes` into `notes`.
+ * Shared by `server/index.ts` (server mode) and `src/ai/client.ts` (browser mode) so the two
+ * code paths behave identically. Throws if `rawJsonText` is not valid JSON.
+ */
+export function parseStatementExtraction(rawJsonText: string): GepfStatementValues {
+  const parsed = JSON.parse(rawJsonText) as GepfStatementValues & { extractionNotes?: string | null }
+  const { extractionNotes, ...rest } = parsed
+  const values: GepfStatementValues = { ...rest }
+  if (extractionNotes) {
+    values.notes = values.notes ? `${values.notes}\n\n${extractionNotes}` : extractionNotes
+  }
+  return values
+}
+
 /** Instruction sent alongside the document/image block to `/api/extract-statement`. */
 export const STATEMENT_PROMPT = `The attached file is a page (or pages) from a GEPF benefit statement. Extract every value you
 can confidently find into the given schema. Rules:

@@ -1,22 +1,34 @@
 import type { MacroHistory } from '../engine/types'
 
 /**
- * Macro history for the rand, inflation and asset returns. PRELIMINARY values pending verification by
- * research/macro.verified.md. Exchange rates are annual averages (USD/ZAR); CPI is annual average % change.
+ * Macro history for the rand, inflation and asset returns. Verified against public sources as at
+ * 2026-09-09 — see research/macro.md for the full narrative, fact tables and per-figure sourcing/
+ * confidence notes (several figures, especially pre-2023 medical-aid/electricity series and the
+ * long-run asset-return table, are explicitly flagged there as estimates). Exchange rates are annual
+ * averages (USD/ZAR); CPI is annual average % change.
  */
 const usdZar: [number, number][] = [
   [1994, 3.55], [1995, 3.63], [1996, 4.30], [1997, 4.61], [1998, 5.53], [1999, 6.11], [2000, 6.94],
   [2001, 8.60], [2002, 10.54], [2003, 7.56], [2004, 6.45], [2005, 6.36], [2006, 6.77], [2007, 7.05],
   [2008, 8.26], [2009, 8.47], [2010, 7.32], [2011, 7.26], [2012, 8.21], [2013, 9.65], [2014, 10.85],
   [2015, 12.76], [2016, 14.71], [2017, 13.31], [2018, 13.23], [2019, 14.45], [2020, 16.46],
-  [2021, 14.79], [2022, 16.36], [2023, 18.45], [2024, 18.33], [2025, 17.9], [2026, 17.5],
+  [2021, 14.79], [2022, 16.36], [2023, 18.45], [2024, 18.33], [2025, 17.88],
+  // 2026: not a full-year average yet — spot traded ~16.0-16.5 through H1-H2 2026 after SA's Oct 2025
+  // FATF exit and the 2025/26 Fitch/S&P rating upgrades; used here as a placeholder for the partial year.
+  [2026, 16.2],
 ]
 
 const saCpi: [number, number][] = [
   [1994, 8.9], [1995, 8.7], [1996, 7.4], [1997, 8.6], [1998, 6.9], [1999, 5.2], [2000, 5.4], [2001, 5.7],
   [2002, 9.2], [2003, 5.8], [2004, 1.4], [2005, 3.4], [2006, 4.7], [2007, 7.1], [2008, 11.5], [2009, 7.1],
   [2010, 4.3], [2011, 5.0], [2012, 5.6], [2013, 5.7], [2014, 6.1], [2015, 4.6], [2016, 6.3], [2017, 5.3],
-  [2018, 4.6], [2019, 4.1], [2020, 3.3], [2021, 4.5], [2022, 6.9], [2023, 6.0], [2024, 4.4], [2025, 3.2],
+  [2018, 4.6], [2019, 4.1], [2020, 3.3], [2021, 4.5], [2022, 6.9], [2023, 6.0], [2024, 4.4],
+  // 2025 confirmed by Stats SA as the lowest annual average since 2004 (1.4%).
+  [2025, 3.2],
+  // 2026: not a full annual average yet (Stats SA publishes it in Jan 2027). Monthly y/y prints to July
+  // 2026 were 3.1 (Mar), 4.0 (Apr), 4.5 (May), 5.0 (Jun, a 2-year high on fuel prices), 4.3 (Jul) —
+  // year-to-date average ~4.2, used here as an ESTIMATE pending the final Stats SA figure.
+  [2026, 4.2],
 ]
 
 const usCpi: [number, number][] = [

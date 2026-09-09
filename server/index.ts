@@ -8,8 +8,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express, { type Request, type Response } from 'express'
 import Anthropic from '@anthropic-ai/sdk'
-import { buildMessages, buildSystemPrompt, STATEMENT_PROMPT, STATEMENT_SCHEMA } from '../src/ai/shared'
-import type { AiChatMessage, AiContext, GepfStatementValues } from '../src/engine/types'
+import { buildMessages, buildSystemPrompt, parseStatementExtraction, STATEMENT_PROMPT, STATEMENT_SCHEMA } from '../src/ai/shared'
+import type { AiChatMessage, AiContext } from '../src/engine/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -158,20 +158,11 @@ app.post('/api/extract-statement', async (req: Request, res: Response) => {
       return
     }
 
-    let parsed: GepfStatementValues & { extractionNotes?: string | null }
     try {
-      parsed = JSON.parse(textBlock.text) as GepfStatementValues & { extractionNotes?: string | null }
+      res.json(parseStatementExtraction(textBlock.text))
     } catch {
       res.status(502).json({ error: 'extraction_failed', message: 'The model returned unparseable JSON.' })
-      return
     }
-
-    const { extractionNotes, ...rest } = parsed
-    const values: GepfStatementValues = { ...rest }
-    if (extractionNotes) {
-      values.notes = values.notes ? `${values.notes}\n\n${extractionNotes}` : extractionNotes
-    }
-    res.json(values)
   } catch (err) {
     const { status, type, message } = classifyError(err)
     res.status(status).json({ error: type, message })

@@ -170,9 +170,13 @@ describe('gepfBenefitsAtExit statement path — growth to exit age', () => {
     profile.gepf.statement = { statementDate: TODAY, retirementGratuity: 200_000, retirementAnnuityAnnual: 50_000 }
     const { resignation } = gepfBenefitsAtExit(profile, 60, RULES)
     const factor = interpolateFactor(RULES.actuarialFactors, 60)
-    expect(resignation.gratuityComponent).toBeCloseTo(200_000, 6)
-    expect(resignation.annuityComponent).toBeCloseTo(50_000 * factor, 6)
-    expect(resignation.actuarialInterest).toBeCloseTo(200_000 + 50_000 * factor, 6)
+    // Without a statement resignation value the engine falls back to Rule 14.4 on the projected
+    // service and salary: AI = N x FS x F(60); the (grown) statement gratuity is the gratuity part.
+    const { serviceYears, finalSalaryAnnual } = gepfBenefitsAtExit(profile, 60, RULES)
+    const ai = serviceYears * finalSalaryAnnual * factor
+    expect(resignation.actuarialInterest).toBeCloseTo(ai, 4)
+    expect(resignation.gratuityComponent).toBeCloseTo(Math.min(200_000, ai), 4)
+    expect(resignation.annuityComponent).toBeCloseTo(ai - Math.min(200_000, ai), 4)
     const sum = resignation.vestedComponent + resignation.savingsComponent + resignation.retirementComponent
     expect(sum).toBeCloseTo(resignation.actuarialInterest, 2)
   })

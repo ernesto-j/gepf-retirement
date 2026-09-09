@@ -12,8 +12,10 @@
  *   10+ years:  gratuity = 0.0672 x FS x N        annuity = FS x N / 55 + R360 p.a.
  *   < 10 years: gratuity = 0.15 x FS x N (proxy for the actuarial interest), no annuity
  *   early retirement (55-59, no exemption): x (1 - months before 60 x 1/300)
- *   resignation: actuarial interest = unreduced gratuity + unreduced annuity x F(age)
+ *   resignation: actuarial interest = N x FS x F(age)   (GEPF Rule 14.4; FAQ example F(40) = 0.2036)
  * where FS = average pensionable salary over the last 24 months and N = pensionable service.
+ * `gratuityComponent` reports the unreduced gratuity and `annuityComponent` the remainder, i.e. the
+ * value the factor implicitly places on the annuity.
  */
 import type {
   ActuarialFactorTable,
@@ -153,6 +155,9 @@ interface UnreducedBenefit {
   gratuity: number
   annuity: number
   gratuityOnly: boolean
+  /** Inputs kept for the actuarial-interest formula (N x FS x F(Z)). */
+  finalSalary: number
+  serviceYears: number
 }
 
 function unreducedBenefit(finalSalaryAnnual: number, serviceYears: number, rules: GepfRules): UnreducedBenefit {
@@ -161,12 +166,14 @@ function unreducedBenefit(finalSalaryAnnual: number, serviceYears: number, rules
   if (years < rules.minServiceYearsForPension) {
     // < 10 years: GEPF pays the actuarial interest as a gratuity. The spec models this as
     // 0.15 x FS x years (a proxy; the true value is age-dependent).
-    return { gratuity: rules.shortServiceGratuityFactor * fs * years, annuity: 0, gratuityOnly: true }
+    return { gratuity: rules.shortServiceGratuityFactor * fs * years, annuity: 0, gratuityOnly: true, finalSalary: fs, serviceYears: years }
   }
   return {
     gratuity: rules.gratuityFactor * fs * years,
     annuity: (fs * years) / rules.annuityDivisor + rules.annuityFixedAddition,
     gratuityOnly: false,
+    finalSalary: fs,
+    serviceYears: years,
   }
 }
 
@@ -281,9 +288,10 @@ export function splitTwoPot(
 /** Actuarial interest from unreduced amounts plus the two-pot split. */
 function resignationFromUnreduced(u: UnreducedBenefit, ageAtExit: number, preShare: number, rules: GepfRules): GepfResignationBenefit {
   const factorUsed = interpolateFactor(rules.actuarialFactors, ageAtExit)
-  const gratuityComponent = u.gratuity
-  const annuityComponent = u.annuity * factorUsed
-  const actuarialInterest = gratuityComponent + annuityComponent
+  // GEPF Rule 14.4: actuarial interest = pensionable service x final salary x F(Z).
+  const actuarialInterest = u.serviceYears * u.finalSalary * factorUsed
+  const gratuityComponent = Math.min(u.gratuity, actuarialInterest)
+  const annuityComponent = actuarialInterest - gratuityComponent
   const result: GepfResignationBenefit = {
     actuarialInterest,
     factorUsed,
@@ -293,7 +301,7 @@ function resignationFromUnreduced(u: UnreducedBenefit, ageAtExit: number, preSha
   }
   const prev = rules.previousActuarialFactors
   if (prev) {
-    result.actuarialInterestPreviousFactors = u.gratuity + u.annuity * interpolateFactor(prev, ageAtExit)
+    result.actuarialInterestPreviousFactors = u.serviceYears * u.finalSalary * interpolateFactor(prev, ageAtExit)
   }
   return result
 }
@@ -433,6 +441,8 @@ export function gepfBenefitsAtExit(
     gratuity: stGratuity !== undefined ? stGratuity * growth : formula.gratuity,
     annuity: stAnnuity !== undefined ? stAnnuity * growth : formula.annuity,
     gratuityOnly: formula.gratuityOnly && stAnnuity === undefined,
+    finalSalary: formula.finalSalary,
+    serviceYears: formula.serviceYears,
   }
   const retirement = finaliseRetirement(unreduced, ageAtExit, exempt, spousePensionPct, rules)
 
@@ -459,11 +469,8 @@ export function gepfBenefitsAtExit(
     }
     const actuarialInterest = aiCurrent * growth
     const factorUsed = interpolateFactor(rules.actuarialFactors, ageAtExit)
-    // Split the statement value into gratuity / annuity parts pro rata to the formula parts.
-    const formulaGratuityPart = unreduced.gratuity
-    const formulaAnnuityPart = unreduced.annuity * factorUsed
-    const formulaTotal = formulaGratuityPart + formulaAnnuityPart
-    const gratuityComponent = formulaTotal > 0 ? (actuarialInterest * formulaGratuityPart) / formulaTotal : actuarialInterest
+    // Report the unreduced gratuity as the gratuity part; the remainder is the implied annuity value.
+    const gratuityComponent = Math.min(unreduced.gratuity, actuarialInterest)
     const annuityComponent = actuarialInterest - gratuityComponent
     resignation = {
       actuarialInterest,

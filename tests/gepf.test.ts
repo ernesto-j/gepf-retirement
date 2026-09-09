@@ -240,8 +240,8 @@ describe('interpolateFactor', () => {
 // calcGepfResignationBenefit — the formula EXACTLY as gepf.ts implements it
 // ---------------------------------------------------------------------------
 
-describe('calcGepfResignationBenefit (actuarial interest = unreduced gratuity + unreduced annuity x F(age))', () => {
-  it('matches gratuity + annuity x factor(age), not service x salary x F(Z)', () => {
+describe('calcGepfResignationBenefit (actuarial interest = service x final salary x F(age), GEPF Rule 14.4)', () => {
+  it('matches service x salary x F(Z), reporting the unreduced gratuity as the gratuity part', () => {
     const finalSalaryAnnual = 600_000
     const pensionableServiceYears = 20
     const ageAtExit = 45
@@ -262,9 +262,11 @@ describe('calcGepfResignationBenefit (actuarial interest = unreduced gratuity + 
     expect(factor).toBeGreaterThan(0)
     expect(factor).toBeLessThan(1)
 
-    const expectedGratuityComponent = unreducedGratuity
-    const expectedAnnuityComponent = unreducedAnnuity * factor
-    const expectedActuarialInterest = expectedGratuityComponent + expectedAnnuityComponent
+    // Rule 14.4: AI = N x FS x F(Z) = 20 x 600,000 x factor
+    const expectedActuarialInterest = pensionableServiceYears * finalSalaryAnnual * factor
+    const expectedGratuityComponent = Math.min(unreducedGratuity, expectedActuarialInterest)
+    const expectedAnnuityComponent = expectedActuarialInterest - expectedGratuityComponent
+    expect(unreducedAnnuity).toBeGreaterThan(0)
 
     const result = calcGepfResignationBenefit(
       { finalSalaryAnnual, pensionableServiceYears, ageAtExit, serviceYearsBeforeTwoPot },
@@ -275,9 +277,8 @@ describe('calcGepfResignationBenefit (actuarial interest = unreduced gratuity + 
     expect(result.gratuityComponent).toBeCloseTo(expectedGratuityComponent, 6)
     expect(result.annuityComponent).toBeCloseTo(expectedAnnuityComponent, 6)
     expect(result.actuarialInterest).toBeCloseTo(expectedActuarialInterest, 6)
-    // Explicitly NOT the SPEC.md/types.ts "service x FS x F(Z)" formula:
-    const specFormulaValue = pensionableServiceYears * finalSalaryAnnual * factor
-    expect(result.actuarialInterest).not.toBeCloseTo(specFormulaValue, 0)
+    // Explicitly NOT the old "gratuity + annuity x factor" formula:
+    expect(result.actuarialInterest).not.toBeCloseTo(unreducedGratuity + unreducedAnnuity * factor, 0)
 
     // Two-pot split sums back to the actuarial interest (see the dedicated splitTwoPot tests below
     // for the seed-cap behaviour).
@@ -287,7 +288,7 @@ describe('calcGepfResignationBenefit (actuarial interest = unreduced gratuity + 
 
     // Comparison figure against the previous (2021) factor table is filled when present.
     const prevFactor = interpolateFactor(RULES.previousActuarialFactors!, ageAtExit)
-    expect(result.actuarialInterestPreviousFactors).toBeCloseTo(unreducedGratuity + unreducedAnnuity * prevFactor, 6)
+    expect(result.actuarialInterestPreviousFactors).toBeCloseTo(pensionableServiceYears * finalSalaryAnnual * prevFactor, 6)
   })
 
   it('applies no early-retirement reduction to the resignation benefit (unlike the retirement benefit)', () => {
@@ -300,15 +301,17 @@ describe('calcGepfResignationBenefit (actuarial interest = unreduced gratuity + 
     expect(at60.gratuityComponent).toBeCloseTo(0.0672 * 600_000 * 20, 6)
   })
 
-  it('under 10 years: actuarial interest is the short-service gratuity plus zero annuity component', () => {
+  it('under 10 years: actuarial interest is still N x FS x F(Z); the short-service gratuity is the reported gratuity part', () => {
     const result = calcGepfResignationBenefit(
       { finalSalaryAnnual: 600_000, pensionableServiceYears: 8, ageAtExit: 45, serviceYearsBeforeTwoPot: 4 },
       RULES,
     )
-    // gratuity = 0.15 x 600,000 x 8 = 720,000; annuity = 0 so annuityComponent = 0 x factor = 0.
-    expect(result.gratuityComponent).toBeCloseTo(720_000, 2)
-    expect(result.annuityComponent).toBe(0)
-    expect(result.actuarialInterest).toBeCloseTo(720_000, 2)
+    const factor = interpolateFactor(RULES.actuarialFactors, 45)
+    // AI = 8 x 600,000 x F(45); gratuity part = min(0.15 x 600,000 x 8 = 720,000, AI)
+    const ai = 8 * 600_000 * factor
+    expect(result.actuarialInterest).toBeCloseTo(ai, 2)
+    expect(result.gratuityComponent).toBeCloseTo(Math.min(720_000, ai), 2)
+    expect(result.annuityComponent).toBeCloseTo(ai - Math.min(720_000, ai), 2)
   })
 })
 

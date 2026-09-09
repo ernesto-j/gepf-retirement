@@ -38,13 +38,18 @@ const usCpi: [number, number][] = [
   [2018, 2.4], [2019, 1.8], [2020, 1.2], [2021, 4.7], [2022, 8.0], [2023, 4.1], [2024, 2.9], [2025, 2.7],
 ]
 
+// Weighted-average medical scheme contribution increases (Discovery/Bonitas/Momentum blend). 2024-2026
+// are confirmed against scheme announcements (see research/macro.md §8); 2015-2023 are ESTIMATES
+// consistent with the well-documented pattern of medical inflation running several points above CPI.
 const medicalAidInflation: [number, number][] = [
   [2015, 9.5], [2016, 10.2], [2017, 10.5], [2018, 9.0], [2019, 9.2], [2020, 9.5], [2021, 4.5], [2022, 6.5],
-  [2023, 7.5], [2024, 9.0], [2025, 9.5], [2026, 9.0],
+  [2023, 9.0], [2024, 8.0], [2025, 9.6], [2026, 8.6],
 ]
 
+// NERSA-approved Eskom-direct-customer tariff increases. 2023/24-2026/27 are confirmed against
+// Eskom/NERSA releases (see research/macro.md §9); 2019/20-2022/23 are carried over as estimates.
 const electricityTariffIncrease: [number, number][] = [
-  [2019, 13.8], [2020, 8.8], [2021, 15.6], [2022, 9.6], [2023, 18.65], [2024, 12.7], [2025, 12.7], [2026, 5.4],
+  [2019, 13.8], [2020, 8.8], [2021, 15.6], [2022, 9.6], [2023, 18.65], [2024, 12.7], [2025, 12.74], [2026, 8.76],
 ]
 
 const pts = (arr: [number, number][], scale = 1) => arr.map(([year, value]) => ({ year, value: value * scale }))

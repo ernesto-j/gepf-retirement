@@ -133,9 +133,16 @@ app.post('/api/extract-statement', async (req: Request, res: Response) => {
     return
   }
 
-  const contentBlock: Record<string, unknown> = pdfBase64
+  const contentBlock: Anthropic.ContentBlockParam = pdfBase64
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } }
-    : { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } }
+    : {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          data: imageBase64 as string,
+        },
+      }
 
   try {
     const response = await client.messages.create({

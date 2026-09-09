@@ -33,7 +33,7 @@ import type {
   ScenarioResult,
 } from '../src/engine/types'
 import { compareScenarios, defaultScenarios, runScenario, summarise } from '../src/engine/projection'
-import { calcIncomeTax, calcRetirementLumpSumTax, calcWithdrawalLumpSumTax, getTaxTables } from '../src/engine/tax'
+import { calcIncomeTax, calcRetirementLumpSumTax, calcSavingsPotWithdrawalTax, calcWithdrawalLumpSumTax, getTaxTables } from '../src/engine/tax'
 import { gepfBenefitsAtExit, getGepfRules } from '../src/engine/gepf'
 import { FUNDS } from '../src/data/funds'
 
@@ -307,7 +307,13 @@ describe('resign-cash at exit', () => {
     const maxCash = benefits.resignation.maxCashOnResignation
     expect(r.atExit.lumpSumGross).toBeCloseTo(maxCash, 9) // cashOutFraction = 1
     expect(r.atExit.lumpSumTable).toBe('withdrawal')
-    expect(r.atExit.lumpSumTax).toBeCloseTo(calcWithdrawalLumpSumTax(maxCash, 0, T).tax, 9)
+    // Two-pot: vested component on the withdrawal table; savings component at the marginal rate on top of
+    // the final salary in the resignation year.
+    const vested = benefits.resignation.vestedComponent
+    const savings = benefits.resignation.savingsComponent
+    const expectedTax =
+      calcWithdrawalLumpSumTax(vested, 0, T).tax + calcSavingsPotWithdrawalTax(savings, benefits.finalSalaryAnnual, profile.person.plannedExitAge, T)
+    expect(r.atExit.lumpSumTax).toBeCloseTo(expectedTax, 6)
     expect(r.atExit.lumpSumNet).toBeCloseTo(maxCash - r.atExit.lumpSumTax, 9)
     // Withdrawal tax is far worse than the retirement table on the same amount.
     expect(r.atExit.lumpSumTax).toBeGreaterThan(calcRetirementLumpSumTax(maxCash, 0, T).tax)
@@ -315,8 +321,11 @@ describe('resign-cash at exit', () => {
 
   it('aggregates with previous lump sums', () => {
     const withPrevious = run(base({ gepf: { previousLumpSumsWithdrawal: 300_000 } }), 'cash')
-    const maxCash = benefits.resignation.maxCashOnResignation
-    expect(withPrevious.atExit.lumpSumTax).toBeCloseTo(calcWithdrawalLumpSumTax(maxCash, 300_000, T).tax, 9)
+    const vested = benefits.resignation.vestedComponent
+    const savings = benefits.resignation.savingsComponent
+    const expectedTax =
+      calcWithdrawalLumpSumTax(vested, 300_000, T).tax + calcSavingsPotWithdrawalTax(savings, benefits.finalSalaryAnnual, profile.person.plannedExitAge, T)
+    expect(withPrevious.atExit.lumpSumTax).toBeCloseTo(expectedTax, 6)
     expect(withPrevious.atExit.lumpSumTax).toBeGreaterThan(r.atExit.lumpSumTax)
   })
 

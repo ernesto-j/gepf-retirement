@@ -140,7 +140,7 @@ Common
 - Then living-annuity drawdown as above.
 
 `resign-cash`
-- At exit: `cash = maxCashOnResignation · cashOutFraction` taxed on the **withdrawal** table (aggregated). Net of tax, minus `onceOffCapitalNeeds`, invested as discretionary (offshore share = `offshorePct`, with FX cost). Remaining vested/savings plus the retirement component transferred to a preservation fund → living annuity at `retireFromPreservationAge` (same as resign-preserve). Medical subsidy forfeited.
+- At exit: `cash = maxCashOnResignation · cashOutFraction`; the vested part is taxed on the **withdrawal** table (aggregated) and the savings-component part at the marginal rate on top of the final salary in the resignation year (two-pot rules). Net of tax, minus `onceOffCapitalNeeds`, invested as discretionary (offshore share = `offshorePct`, with FX cost). Remaining vested/savings plus the retirement component transferred to a preservation fund → living annuity at `retireFromPreservationAge` (same as resign-preserve). Medical subsidy forfeited.
 - Draw: living annuity first (target-income), then discretionary.
 
 `defaultScenarios(profile)` returns: `stay` (stay-gepf, gratuity 30% offshore), `preserve` (resign-preserve, low-cost index fund, 50% offshore in the living annuity), `cash` (resign-cash, 100% cash-out, 70% offshore). Names: "Stay: retire from GEPF", "Leave: preserve & living annuity", "Leave: cash out & invest offshore".

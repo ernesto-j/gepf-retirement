@@ -93,7 +93,7 @@ import { DEFAULT_FUND_ID, FUNDS } from '../data/funds'
 import { gepfBenefitsAtExit, getGepfRules } from './gepf'
 import { clamp } from './money'
 import { prosCons, riskFlags } from './insights'
-import { calcIncomeTax, calcRetirementLumpSumTax, calcWithdrawalLumpSumTax, getTaxTables, grossForNet } from './tax'
+import { calcIncomeTax, calcRetirementLumpSumTax, calcSavingsPotWithdrawalTax, calcWithdrawalLumpSumTax, getTaxTables, grossForNet } from './tax'
 
 // ---------------------------------------------------------------------------
 // Numeric guards (the engine never throws and never emits NaN / Infinity)
@@ -505,12 +505,23 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     notes.push('The full actuarial interest is transferred to a preservation fund: no tax is payable on the transfer.')
   } else {
     const cashFraction = fraction(def.cashOutFraction, 1)
-    lumpSumGross = nonNeg(resignation.maxCashOnResignation) * cashFraction
-    const lst = calcWithdrawalLumpSumTax(lumpSumGross, previousLumpSums, tables)
-    lumpSumTax = lst.tax
-    lumpSumNet = lst.net
+    // Two-pot: the vested component is a withdrawal benefit (withdrawal lump-sum table, aggregated);
+    // the savings component is taxed at the member's marginal rate on top of their income in the year
+    // of resignation (approximated by the final pensionable salary).
+    const vestedCash = nonNeg(resignation.vestedComponent) * cashFraction
+    const savingsCash = nonNeg(resignation.savingsComponent) * cashFraction
+    lumpSumGross = vestedCash + savingsCash
+    const lst = calcWithdrawalLumpSumTax(vestedCash, previousLumpSums, tables)
+    const savingsTax = calcSavingsPotWithdrawalTax(savingsCash, nonNeg(finalSalaryAnnual), exitAge, tables)
+    lumpSumTax = lst.tax + savingsTax
+    lumpSumNet = lumpSumGross - lumpSumTax
     lumpSumTable = 'withdrawal'
-    previousLumpSums += lumpSumGross
+    previousLumpSums += vestedCash
+    if (savingsCash > CENT) {
+      notes.push(
+        `Savings component cash of ${formatNote(savingsCash)} is taxed at your marginal rate (${formatNote(savingsTax)}) on top of your salary in the year you resign; the vested component ${formatNote(vestedCash)} is taxed on the withdrawal table.`,
+      )
+    }
     transferredToPreservation = nonNeg(resignation.maxCashOnResignation) - lumpSumGross + nonNeg(resignation.retirementComponent)
     addPot('Invested cash', 'discretionary', afterOnceOff(lumpSumNet), fraction(def.offshorePct), fee, true)
     addPot('Preservation fund', 'preservation', transferredToPreservation, preservationOffshore, fee, false)
@@ -550,6 +561,14 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   let commutationTax = 0
   let lifetimeFees = fxCostAtExit
   let ruinAge: number | null = null
+  /**
+   * True once the scenario has actually held investable capital. `ruinAge` means "the capital
+   * ran out", so a route that never had any capital to begin with (e.g. a GEPF pension where the
+   * whole gratuity went on once-off needs and there are no other savings) must report `null`,
+   * not the exit age: nothing was exhausted, and the comparison table's "capital runs out at age"
+   * would otherwise rank a lifelong pension worst on a metric that does not apply to it.
+   */
+  let capitalEverPositive = false
   let incomeShortfallAge: number | null = null
   const horizonYears = Math.round(planToAge - exitAge)
 
@@ -623,6 +642,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     }
 
     const capitalStart = totalValue(pots, usdZar)
+    if (capitalStart > CENT) capitalEverPositive = true
 
     // --- Income sources -----------------------------------------------------
     const gepfPensionGross = pensionYear0 * (1 + a.officialCpi * a.gepfIncreaseAsPctOfCpi) ** i
@@ -733,7 +753,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
       capped: shortfall > CENT,
     }
     rows.push(row)
-    if (ruinAge === null && row.capitalEnd <= CENT) ruinAge = age
+    if (ruinAge === null && capitalEverPositive && row.capitalEnd <= CENT) ruinAge = age
     if (incomeShortfallAge === null && shortfall > 0.01 * Math.max(1, targetNetIncome)) incomeShortfallAge = age
   }
 

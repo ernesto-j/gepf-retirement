@@ -22,7 +22,7 @@ export function ArgumentsColumns({ core }: { core: ScenarioResult[] | null }) {
     stay
       ? `In your own numbers, the GEPF pension supplies ${formatPct(stay.totals.guaranteedIncomeShare)} of your first-year net income guaranteed for life.`
       : 'A defined-benefit pension typically supplies most of a retiree\'s guaranteed income, reducing reliance on markets.',
-    'The GEPF is currently well funded (state guarantor, ~110%+ funding level) and the increase rule guarantees at least 75% of CPI.',
+    'The GEPF is currently well funded (state guarantor, ~119% funding level before contingency reserves at the 31 March 2024 valuation) and the increase rule guarantees at least 75% of CPI.',
   ]
 
   const forLeaving: string[] = [

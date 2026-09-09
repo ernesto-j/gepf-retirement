@@ -38,7 +38,14 @@ const TABLE_2025_26: TaxTables = {
   interestExemption: { under65: 23_800, age65plus: 34_500 },
   cgt: { inclusionRate: 0.4, annualExclusion: 40_000 },
   dividendsTax: 0.2,
-  deMinimisAnnuitisation: 165_000,
+  // Living-annuity commutation threshold (prescribed amount below which an existing living
+  // annuity may be commuted to cash in full — this is what `deMinimisAnnuitisation` is used
+  // for in projection.ts). R125,000 up to 28 Feb 2026, raised to R150,000 from 1 March 2026
+  // (Government Gazette 54399, 23 Mar 2026) — see research/tax-rules.md §9. Not to be confused
+  // with the separate "full cash at retirement" de minimis on the whole retirement interest
+  // (R247,500 -> R360,000) or its two-pot "annuitisable portion" restatement (R165,000 ->
+  // R240,000); this field models the living-annuity-in-payment commutation rule specifically.
+  deMinimisAnnuitisation: 125_000,
   savingsPotMinWithdrawal: 2_000,
   estateDuty: { abatement: 3_500_000, rate: 0.2, higherRate: 0.25, higherRateThreshold: 30_000_000 },
   reg28: { maxOffshore: 0.45, maxEquity: 0.75 },
@@ -47,14 +54,15 @@ const TABLE_2025_26: TaxTables = {
     'https://www.sars.gov.za/tax-rates/income-tax/rates-of-tax-for-individuals/',
     'https://www.sars.gov.za/tax-rates/income-tax/retirement-lump-sum-benefits/',
     'https://www.sars.gov.za/tax-rates/income-tax/medical-tax-credit-rates/',
+    'https://seb-news.sanlam.co.za/consultant-toolkit/key-retirement-fund-values-and-changes-effective-1-march-2026/',
   ],
 }
 
 /**
  * 2026/27 (1 March 2026 – 28 February 2027). Delivered in the February 2026 Budget: brackets,
  * all three rebates and the three age thresholds rose 3.4% (the first inflation adjustment since
- * 2023/24); the medical scheme fees tax credit, CGT annual exclusion and the retirement de minimis
- * (full-cash) threshold also rose. Every "base" (cumulative tax at each threshold) below was
+ * 2023/24); the medical scheme fees tax credit, CGT annual exclusion and the living-annuity
+ * commutation threshold also rose. Every "base" (cumulative tax at each threshold) below was
  * re-derived arithmetically from the marginal rate and the prior bracket's base and reconciles
  * exactly, e.g. 245,100 x 18% = 44,118; 44,118 + 26% x (383,100 - 245,100) = 79,998; and so on up
  * to 259,783 + 41% x (1,878,600 - 887,000) = 666,339. The three thresholds are like-for-like checks:
@@ -99,7 +107,9 @@ const TABLE_2026_27: TaxTables = {
   interestExemption: { under65: 23_800, age65plus: 34_500 },
   cgt: { inclusionRate: 0.4, annualExclusion: 50_000 },
   dividendsTax: 0.2,
-  deMinimisAnnuitisation: 360_000,
+  // See the 2025/26 table above for what this field represents (living-annuity commutation
+  // threshold, not the "full cash at retirement" de minimis) — R150,000 from 1 March 2026.
+  deMinimisAnnuitisation: 150_000,
   savingsPotMinWithdrawal: 2_000,
   estateDuty: { abatement: 3_500_000, rate: 0.2, higherRate: 0.25, higherRateThreshold: 30_000_000 },
   reg28: { maxOffshore: 0.45, maxEquity: 0.75 },

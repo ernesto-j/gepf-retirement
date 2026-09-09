@@ -605,7 +605,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     const annuityPot = pots.find((p) => p.kind === 'living-annuity')
     if (annuityPot) {
       const value = potValue(annuityPot, usdZar)
-      const deMinimis = nonNeg(tables.deMinimisAnnuitisation, 165_000) * personalIndex
+      const deMinimis = nonNeg(tables.deMinimisAnnuitisation, 150_000) * personalIndex
       if (value > 0 && value < deMinimis) {
         const lst = calcRetirementLumpSumTax(value, previousLumpSums, tables)
         previousLumpSums += value
@@ -616,7 +616,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
         annuityPot.name = 'Commuted living annuity'
         notes.push(
           `At age ${age} the living annuity is worth less than the de-minimis commutation amount (${formatNote(
-            nonNeg(tables.deMinimisAnnuitisation, 165_000),
+            nonNeg(tables.deMinimisAnnuitisation, 150_000),
           )} in today's rand), so it is taken in full as a lump sum and the balance is treated as discretionary savings.`,
         )
       }

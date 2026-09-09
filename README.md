@@ -45,12 +45,12 @@ The single-file build can be opened straight from disk or emailed. Its AI featur
 - 10+ years' service: gratuity = 6.72% × final salary × service; annuity = final salary × service ÷ 55 + R360 a year.
 - Under 10 years: gratuity only (15% × final salary × service).
 - Early retirement between 55 and 60 without employer approval: ⅓% reduction per month before 60.
-- Resignation at any age: actuarial interest = gratuity + annuity × age factor, using the factors the GEPF introduced on **1 October 2025** (on average ~15% lower than the 2021 factors). The value under the previous factors is shown for comparison.
+- Resignation at any age: actuarial interest = pensionable service × final salary × age-dependent factor F(age) (GEPF Rule 14.4), using the factors the GEPF introduced on **1 October 2025** (on average ~15% lower than the 2021 factors). The value under the previous factors is shown for comparison.
 - Two-pot split of the actuarial interest: vested (pre-September-2024 accrual, less the 10%/R30,000 seed), savings (seed + ⅓ of later accrual) and retirement (⅔ of later accrual). On resignation you may cash the vested and savings components; the retirement component must be preserved.
 
 ### Tax (engine/tax.ts)
 
-SARS tables for 2025/26 (unchanged in the 2025 Budget): seven income brackets, primary/secondary/tertiary rebates, medical scheme fees tax credits, the retirement lump-sum table (first R550,000 tax-free) and the withdrawal table (first R27,500 tax-free), both applied cumulatively over all previous lump sums. Living-annuity draws and the GEPF pension are taxed as income with the age rebates; the tool shows the monthly PAYE at 60, 65 and 75.
+SARS tables for 2026/27 (the app's default tax year; 2025/26 is also available): seven income brackets, primary/secondary/tertiary rebates, medical scheme fees tax credits, the retirement lump-sum table (first R550,000 tax-free) and the withdrawal table (first R27,500 tax-free) — both unchanged since 2023/24 and applied cumulatively over all previous lump sums. Living-annuity draws and the GEPF pension are taxed as income with the age rebates; the tool shows the monthly PAYE at 60, 65 and 75.
 
 ### Projection (engine/projection.ts)
 

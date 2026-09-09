@@ -30,9 +30,10 @@ export function PurchasingPowerTable({
 
   const rows = useMemo(() => {
     try {
+      const rates = [officialCpi, personalInflation, medicalInflation]
       return YEARS.map((years) => ({
         years,
-        values: cols.map((c) => requiredIncomeForPurchasingPower(targetMonthlyIncome, years, c.rate)),
+        values: rates.map((rate) => requiredIncomeForPurchasingPower(targetMonthlyIncome, years, rate)),
       }))
     } catch {
       return null

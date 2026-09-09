@@ -60,20 +60,40 @@ export const MACRO: MacroHistory = {
   usCpi: pts(usCpi, 0.01),
   medicalAidInflation: pts(medicalAidInflation, 0.01),
   electricityTariffIncrease: pts(electricityTariffIncrease, 0.01),
+  // Long-run annualised nominal/real ZAR returns by asset class and window. Precise index-level prints
+  // for the ALBI/STeFI and the exact ALSI/MSCI World/S&P500 windows to end-2025 could not be confirmed
+  // against a primary index provider via web search in this pass (JSE/ASISA publish these behind PDFs
+  // and fund fact sheets); these are informed ESTIMATES built from the few confirmed anchors (S&P500
+  // ~11.2% p.a. USD trailing 10y to 2023; rand depreciation ~5-6% p.a.; SA equities' well-documented
+  // strong long-run real-return reputation per the UBS/Credit Suisse Global Investment Returns
+  // Yearbook). See research/macro.md §10 for full detail and caveats — verify against JSE/ASISA/
+  // Morningstar before using these for anything beyond illustrative planning.
   assetReturns: [
     { asset: 'JSE All Share (total return)', years: 10, nominalZar: 0.10, realZar: 0.05, source: 'https://www.jse.co.za/' },
-    { asset: 'SA All Bond Index', years: 10, nominalZar: 0.085, realZar: 0.035, source: 'https://www.jse.co.za/' },
-    { asset: 'SA cash (STeFI)', years: 10, nominalZar: 0.065, realZar: 0.015, source: 'https://www.resbank.co.za/' },
-    { asset: 'MSCI World in ZAR', years: 10, nominalZar: 0.15, realZar: 0.095, source: 'https://www.msci.com/' },
-    { asset: 'S&P 500 in ZAR', years: 10, nominalZar: 0.18, realZar: 0.125, source: 'https://www.spglobal.com/' },
     { asset: 'JSE All Share (total return)', years: 20, nominalZar: 0.12, realZar: 0.065, source: 'https://www.jse.co.za/' },
+    { asset: 'JSE All Share (total return)', years: 30, nominalZar: 0.13, realZar: 0.065, source: 'https://www.jse.co.za/' },
+    { asset: 'SA All Bond Index (ALBI)', years: 10, nominalZar: 0.085, realZar: 0.035, source: 'https://www.jse.co.za/' },
+    { asset: 'SA All Bond Index (ALBI)', years: 20, nominalZar: 0.09, realZar: 0.035, source: 'https://www.jse.co.za/' },
+    { asset: 'SA All Bond Index (ALBI)', years: 30, nominalZar: 0.095, realZar: 0.035, source: 'https://www.jse.co.za/' },
+    { asset: 'SA cash (STeFI)', years: 10, nominalZar: 0.065, realZar: 0.015, source: 'https://www.resbank.co.za/' },
+    { asset: 'SA cash (STeFI)', years: 20, nominalZar: 0.07, realZar: 0.015, source: 'https://www.resbank.co.za/' },
+    { asset: 'SA cash (STeFI)', years: 30, nominalZar: 0.075, realZar: 0.015, source: 'https://www.resbank.co.za/' },
+    { asset: 'MSCI World in ZAR', years: 10, nominalZar: 0.15, realZar: 0.095, source: 'https://www.msci.com/' },
     { asset: 'MSCI World in ZAR', years: 20, nominalZar: 0.135, realZar: 0.08, source: 'https://www.msci.com/' },
+    { asset: 'MSCI World in ZAR', years: 30, nominalZar: 0.13, realZar: 0.075, source: 'https://www.msci.com/' },
+    { asset: 'S&P 500 in ZAR', years: 10, nominalZar: 0.18, realZar: 0.125, source: 'https://www.spglobal.com/' },
+    { asset: 'S&P 500 in ZAR', years: 20, nominalZar: 0.155, realZar: 0.10, source: 'https://www.spglobal.com/' },
+    { asset: 'S&P 500 in ZAR', years: 30, nominalZar: 0.145, realZar: 0.09, source: 'https://www.spglobal.com/' },
   ],
-  asOf: '2026-09-01',
+  asOf: '2026-09-09',
   sources: [
     'https://www.resbank.co.za/en/home/what-we-do/statistics/key-statistics/selected-historical-rates',
     'https://www.statssa.gov.za/?page_id=1854&PPN=P0141',
     'https://www.bls.gov/cpi/',
     'https://www.nersa.org.za/',
+    'https://www.treasury.gov.za/documents/National%20Budget/2026/review/Chapter%202.pdf',
+    'https://www.moneyweb.co.za/news/south-africa/2026-medical-aid-contribution-increases-dhms-vs-the-rest/',
+    'https://gepf.co.za/wp-content/uploads/2025/09/GEPF-statutory-valuation-report-2024-Final-signed.pdf',
+    '../../research/macro.md',
   ],
 }

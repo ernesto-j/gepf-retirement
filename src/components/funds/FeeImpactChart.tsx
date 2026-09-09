@@ -61,7 +61,7 @@ export function FeeImpactChart({ capital, years, grossReturn, height = 320 }: Fe
     <div className="space-y-3">
       <ChartFrame
         title={title}
-        caption={`Each line grows R${formatRandCompact(capital).slice(1)} at a ${(grossReturn * 100).toFixed(1)}% gross annual return, net of the stated all-in fee, with no withdrawals. The gap between lines is pure cost — none of it reflects a difference in investment skill.`}
+        caption={`Each line grows ${formatRandCompact(capital)} at a ${(grossReturn * 100).toFixed(1)}% gross annual return, net of the stated all-in fee, with no withdrawals. The gap between lines is pure cost — none of it reflects a difference in investment skill.`}
       >
         <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">

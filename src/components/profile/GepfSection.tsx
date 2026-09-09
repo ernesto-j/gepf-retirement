@@ -3,7 +3,7 @@ import type { GepfMembership, GepfStatementValues, Profile } from '../../engine/
 import { gepfBenefitsAtExit, getGepfRules } from '../../engine/gepf'
 import { applyStatement } from '../../engine/statement'
 import { Badge, Callout, DataTable, Grid, KpiTile, NumberInput, P, PercentInput, R, RandInput, Section, Toggle, td, th } from '../../components/ui'
-import { StatementUpload } from '../StatementUpload'
+import StatementUpload from '../StatementUpload'
 
 const STATEMENT_ROWS: { key: keyof GepfStatementValues; label: string; format?: (v: unknown) => string }[] = [
   { key: 'statementDate', label: 'Statement date' },

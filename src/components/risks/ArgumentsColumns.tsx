@@ -27,7 +27,7 @@ export function ArgumentsColumns({ core }: { core: ScenarioResult[] | null }) {
 
   const forLeaving: string[] = [
     'Control over your capital: how it is invested, how much offshore, how it is drawn down, and what is left to your heirs.',
-    'The ability to hold a meaningful offshore share as a hedge against rand weakness — something the GEPF's own ~10% offshore allocation does not give you individually.',
+    "The ability to hold a meaningful offshore share as a hedge against rand weakness — something the GEPF's own ~10% offshore allocation does not give you individually.",
     preserve
       ? `Transferring to a preservation fund is completely tax-free (vs a lump sum taxed on exit), and here grows to ${formatRandCompact(
           preserve.atExit.transferredToPreservation,

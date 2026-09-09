@@ -160,13 +160,15 @@ interface UnreducedBenefit {
   serviceYears: number
 }
 
-function unreducedBenefit(finalSalaryAnnual: number, serviceYears: number, rules: GepfRules): UnreducedBenefit {
+function unreducedBenefit(finalSalaryAnnual: number, serviceYears: number, rules: GepfRules, ageAtExit?: number): UnreducedBenefit {
   const fs = Math.max(0, num(finalSalaryAnnual))
   const years = Math.max(0, num(serviceYears))
   if (years < rules.minServiceYearsForPension) {
-    // < 10 years: GEPF pays the actuarial interest as a gratuity. The spec models this as
-    // 0.15 x FS x years (a proxy; the true value is age-dependent).
-    return { gratuity: rules.shortServiceGratuityFactor * fs * years, annuity: 0, gratuityOnly: true, finalSalary: fs, serviceYears: years }
+    // < 10 years: GEPF pays the actuarial interest (N x FS x F(Z)) as a once-off gratuity. When the
+    // exit age is known we use the factor table; otherwise fall back to the 0.15 x FS x N proxy.
+    const age = ageAtExit !== undefined && Number.isFinite(ageAtExit) ? ageAtExit : undefined
+    const gratuity = age !== undefined ? years * fs * interpolateFactor(rules.actuarialFactors, age) : rules.shortServiceGratuityFactor * fs * years
+    return { gratuity, annuity: 0, gratuityOnly: true, finalSalary: fs, serviceYears: years }
   }
   return {
     gratuity: rules.gratuityFactor * fs * years,
@@ -236,7 +238,7 @@ function finaliseRetirement(
  * default (50) when omitted and may be 0 for a member without a spouse.
  */
 export function calcGepfRetirementBenefit(input: GepfBenefitInput, rules: GepfRules): GepfRetirementBenefit {
-  const u = unreducedBenefit(input.finalSalaryAnnual, input.pensionableServiceYears, rules)
+  const u = unreducedBenefit(input.finalSalaryAnnual, input.pensionableServiceYears, rules, num(input.ageAtExit, rules.normalRetirementAge))
   const ageAtExit = num(input.ageAtExit, rules.normalRetirementAge)
   return finaliseRetirement(u, ageAtExit, input.exemptFromEarlyReduction, input.spousePensionPct, rules)
 }
@@ -319,7 +321,7 @@ export function calcGepfResignationBenefit(
   input: GepfBenefitInput & { serviceYearsBeforeTwoPot: number },
   rules: GepfRules,
 ): GepfResignationBenefit {
-  const u = unreducedBenefit(input.finalSalaryAnnual, input.pensionableServiceYears, rules)
+  const u = unreducedBenefit(input.finalSalaryAnnual, input.pensionableServiceYears, rules, num(input.ageAtExit, rules.normalRetirementAge))
   const ageAtExit = num(input.ageAtExit, rules.normalRetirementAge)
   const preShare = twoPotPreShare(input.serviceYearsBeforeTwoPot, Math.max(0, num(input.pensionableServiceYears)))
   return resignationFromUnreduced(u, ageAtExit, preShare, rules)
@@ -409,7 +411,7 @@ export function gepfBenefitsAtExit(
   const spousePensionPct = person.hasSpouse ? num(person.spousePensionPct, rules.spousePensionDefault * 100) : 0
   const exempt = deps?.exemptFromEarlyReduction
 
-  const formula = unreducedBenefit(finalSalaryAnnual, serviceYears, rules)
+  const formula = unreducedBenefit(finalSalaryAnnual, serviceYears, rules, ageAtExit)
 
   const st = m.useStatementValues ? m.statement : undefined
   const stResignation = st ? positive(st.resignationBenefit) : undefined

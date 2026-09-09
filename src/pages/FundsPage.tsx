@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { FundInfo, ScenarioDefinition } from '../engine/types'
-import { formatPct } from '../engine/money'
+import { formatPct, formatRandCompact } from '../engine/money'
 import { DEFAULT_FUND_ID, FUNDS, FUND_ARCHETYPES } from '../data/funds'
 import { useAppStore } from '../store/useAppStore'
 import { EngineBoundary } from '../components/compare/helpers'
@@ -88,7 +88,7 @@ export default function FundsPage() {
         description="Illustrative growth of a lump sum at different all-in fees — the only variable here is cost, not investment choice."
         right={
           <span className="text-xs text-slate-500">
-            R{(illustrativeCapital / 1_000_000).toFixed(0)}m invested at {formatPct(illustrativeReturn, 1)} gross return
+            {formatRandCompact(illustrativeCapital)} invested at {formatPct(illustrativeReturn, 1)} gross return
           </span>
         }
       >

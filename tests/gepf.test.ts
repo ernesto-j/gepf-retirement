@@ -83,12 +83,12 @@ describe('calcGepfRetirementBenefit', () => {
   })
 
   it('under 10 years of service: gratuity-only, no annuity', () => {
-    // gratuity = 0.15 x 600,000 x 8 = 0.15 x 4,800,000 = 720,000
+    // < 10 years: the gratuity IS the actuarial interest = N x FS x F(60) = 8 x 600,000 x F(60)
     const result = calcGepfRetirementBenefit(
       { finalSalaryAnnual: 600_000, pensionableServiceYears: 8, ageAtExit: 60 },
       RULES,
     )
-    expect(result.gratuity).toBeCloseTo(720_000, 2)
+    expect(result.gratuity).toBeCloseTo(8 * 600_000 * interpolateFactor(RULES.actuarialFactors, 60), 2)
     expect(result.annuityAnnual).toBe(0)
     expect(result.gratuityOnly).toBe(true)
   })
@@ -307,11 +307,11 @@ describe('calcGepfResignationBenefit (actuarial interest = service x final salar
       RULES,
     )
     const factor = interpolateFactor(RULES.actuarialFactors, 45)
-    // AI = 8 x 600,000 x F(45); gratuity part = min(0.15 x 600,000 x 8 = 720,000, AI)
+    // AI = 8 x 600,000 x F(45); with < 10 years the whole benefit is a gratuity, so the gratuity part is the AI
     const ai = 8 * 600_000 * factor
     expect(result.actuarialInterest).toBeCloseTo(ai, 2)
-    expect(result.gratuityComponent).toBeCloseTo(Math.min(720_000, ai), 2)
-    expect(result.annuityComponent).toBeCloseTo(ai - Math.min(720_000, ai), 2)
+    expect(result.gratuityComponent).toBeCloseTo(ai, 2)
+    expect(result.annuityComponent).toBeCloseTo(0, 2)
   })
 })
 

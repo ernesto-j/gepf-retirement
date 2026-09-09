@@ -5,6 +5,8 @@ export default defineConfig({
   timeout: 60_000,
   retries: 0,
   use: {
+    // Use a pre-installed Chromium when present (e.g. PLAYWRIGHT_CHROMIUM_PATH) instead of downloading.
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {},
     baseURL: 'http://localhost:4173',
     viewport: { width: 1360, height: 900 },
     screenshot: 'only-on-failure',

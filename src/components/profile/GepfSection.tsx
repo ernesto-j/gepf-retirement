@@ -205,7 +205,7 @@ function GepfPreview({ profile }: { profile: Profile }) {
           Source: <Badge tone={source === 'statement' ? 'brand' : 'neutral'}>{source === 'statement' ? 'your benefit statement' : 'formula estimate'}</Badge>{' '}
           {source === 'statement'
             ? '— grown from your statement values to the planned exit age.'
-            : '— GEPF Rule 14.4 formula: gratuity + annuity × age factor, using the 1 Oct 2025 factor table.'}
+            : '— GEPF Rule 14.4 formula: pensionable service × final salary × F(Z) age factor, using the 1 Oct 2025 factor table.'}
         </p>
       </>
     )

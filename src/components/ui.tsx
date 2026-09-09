@@ -398,7 +398,7 @@ function clampNum(n: number, min?: number, max?: number) {
 
 export function DataTable({ children, caption }: { children: ReactNode; caption?: string }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="relative max-w-full overflow-x-auto rounded-lg border border-slate-200">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         {caption && <caption className="sr-only">{caption}</caption>}
         {children}

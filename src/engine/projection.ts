@@ -382,9 +382,10 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     planToAge = 120
   }
 
+  const FALLBACK_FEE = 0.01
   const fund = funds.find((f) => f.id === def.fundId)
-  if (!fund) notes.push(`Fund "${def.fundId}" was not found; a ${(0.01 * 100).toFixed(1)}% all-in fee has been assumed.`)
-  const fee = fraction(def.feeOverride ?? fund?.allInFee, 0.01)
+  if (!fund) notes.push(`Fund "${def.fundId}" was not found; a ${(FALLBACK_FEE * 100).toFixed(1)}% all-in fee has been assumed.`)
+  const fee = fraction(def.feeOverride ?? fund?.allInFee, FALLBACK_FEE)
   const fundMaxOffshore = fund && fund.type !== 'gepf' ? fraction(fund.maxOffshore, 1) : 1
 
   const benefits = gepfBenefitsAtExit(profile, exitAge, rules)
@@ -546,6 +547,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   const incomeTaxByYear: number[] = []
   let lifetimeIncomeTax = 0
   let lifetimeReturnTax = 0
+  let commutationTax = 0
   let lifetimeFees = fxCostAtExit
   let ruinAge: number | null = null
   let incomeShortfallAge: number | null = null
@@ -593,6 +595,31 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
         pots.push(cashPot.pot)
       }
       if (num(def.lumpSumAtRetirementPct, 1 / 3) > 1 / 3 + 1e-9) notes.push('The lump sum at retirement is capped at one third of the fund value.')
+    }
+
+    // De minimis: once a living annuity is worth less than the amount that may be commuted in
+    // full (`tables.deMinimisAnnuitisation` in today's rand, escalated with personal inflation),
+    // the member takes it in cash on the retirement table and the balance becomes ordinary
+    // discretionary savings. Without this rule a living annuity capped at 17.5% a year would
+    // mathematically never reach zero, so `ruinAge` could never be reached.
+    const annuityPot = pots.find((p) => p.kind === 'living-annuity')
+    if (annuityPot) {
+      const value = potValue(annuityPot, usdZar)
+      const deMinimis = nonNeg(tables.deMinimisAnnuitisation, 165_000) * personalIndex
+      if (value > 0 && value < deMinimis) {
+        const lst = calcRetirementLumpSumTax(value, previousLumpSums, tables)
+        previousLumpSums += value
+        commutationTax += lst.tax
+        withdraw(annuityPot, lst.tax, usdZar)
+        annuityPot.kind = 'discretionary'
+        annuityPot.taxedReturns = true
+        annuityPot.name = 'Commuted living annuity'
+        notes.push(
+          `At age ${age} the living annuity is worth less than the de-minimis commutation amount (${formatNote(
+            nonNeg(tables.deMinimisAnnuitisation, 165_000),
+          )} in today's rand), so it is taken in full as a lump sum and the balance is treated as discretionary savings.`,
+        )
+      }
     }
 
     const capitalStart = totalValue(pots, usdZar)
@@ -759,7 +786,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     totals: {
       lifetimeNetIncomeNominal: finite(lifetimeNetIncomeNominal),
       lifetimeNetIncomeReal: finite(pvNetIncome),
-      lifetimeTaxPaid: finite(lifetimeIncomeTax + lifetimeReturnTax + lumpSumTax + lumpSumTaxAtRetirement),
+      lifetimeTaxPaid: finite(lifetimeIncomeTax + lifetimeReturnTax + commutationTax + lumpSumTax + lumpSumTaxAtRetirement),
       lifetimeFeesPaid: finite(lifetimeFees),
       pvNetIncome: finite(pvNetIncome),
       legacyAtHorizon: finite(last?.capitalEnd ?? 0),

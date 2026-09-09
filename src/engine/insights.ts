@@ -11,7 +11,7 @@
  * Pure functions, no React, no I/O. Nothing throws: missing or degenerate values simply drop
  * the corresponding bullet.
  */
-import type { GepfRules, Profile, RiskFlag, ScenarioResult, TaxTables, YearRow } from './types'
+import type { Assumptions, GepfRules, Profile, RiskFlag, ScenarioResult, TaxTables, YearRow } from './types'
 import { RISK_LIBRARY } from '../data/caseStudies'
 import { gepfBenefitsAtExit } from './gepf'
 import { formatPct, formatRand, formatRandCompact } from './money'
@@ -38,8 +38,31 @@ function age(value: number): string {
   return String(Math.round(finite(value)))
 }
 
+/**
+ * The scenario's assumptions with every number guaranteed finite (the projection clamps the
+ * same way; insights must never print "NaN" or "R0.00" from a blank input).
+ */
+function assumptionsFor(result: ScenarioResult, profile: Profile): Assumptions {
+  const merged = { ...profile.assumptions, ...(result.definition.overrides ?? {}) }
+  const guard = (v: number, fallback: number, lo = -0.9, hi = 1): number =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback
+  return {
+    ...merged,
+    officialCpi: guard(merged.officialCpi, 0.05),
+    personalInflation: guard(merged.personalInflation, 0.07),
+    medicalInflation: guard(merged.medicalInflation, 0.08),
+    gepfIncreaseAsPctOfCpi: guard(merged.gepfIncreaseAsPctOfCpi, 1, 0, 2),
+    randDepreciation: guard(merged.randDepreciation, 0.05),
+    usdZarSpot: guard(merged.usdZarSpot, 18, 0.01, 1000),
+    localBalancedReturn: guard(merged.localBalancedReturn, 0.09),
+    offshoreReturnUsd: guard(merged.offshoreReturnUsd, 0.07),
+    livingAnnuityMaxDrawdown: guard(merged.livingAnnuityMaxDrawdown, 0.175, 0.025, 1),
+  }
+}
+
 /** Numbers that both `prosCons` and `riskFlags` need. */
 interface Derived {
+  a: Assumptions
   tables: TaxTables
   first: YearRow | undefined
   last: YearRow | undefined
@@ -52,6 +75,8 @@ interface Derived {
   firstDrawRow: YearRow | undefined
   /** How much of the pension's purchasing power is left at the horizon (1 = all of it). */
   pensionRealAtHorizon: number
+  /** Years from today to the horizon, guarded. */
+  yearsToHorizon: number
   benefits: ReturnType<typeof gepfBenefitsAtExit>
   lumpSumTaxTotal: number
   lumpSumGrossTotal: number
@@ -66,7 +91,9 @@ function derive(result: ScenarioResult, profile: Profile, rules: GepfRules): Der
   const firstDrawRow = rows.find((r) => r.drawGross > 1 && r.capitalStart > 1)
   const pensionFirst = first && first.personalIndex > 0 ? first.gepfPensionGross / first.personalIndex : 0
   const pensionLast = last && last.personalIndex > 0 ? last.gepfPensionGross / last.personalIndex : 0
+  const currentAge = Number.isFinite(profile.person.currentAge) ? profile.person.currentAge : exitAge
   return {
+    a: assumptionsFor(result, profile),
     tables: getTaxTables(profile.assumptions.taxYear),
     first,
     last,
@@ -77,6 +104,7 @@ function derive(result: ScenarioResult, profile: Profile, rules: GepfRules): Der
     firstDrawRate: firstDrawRow ? firstDrawRow.drawdownRate : 0,
     firstDrawRow,
     pensionRealAtHorizon: pensionFirst > 0 ? pensionLast / pensionFirst : 0,
+    yearsToHorizon: Math.max(0, (last?.age ?? exitAge) - currentAge),
     benefits: gepfBenefitsAtExit(profile, exitAge, rules),
     lumpSumTaxTotal: result.atExit.lumpSumTax + (result.atRetirementFromPreservation?.lumpSumTax ?? 0),
     lumpSumGrossTotal: result.atExit.lumpSumGross + (result.atRetirementFromPreservation?.lumpSumGross ?? 0),
@@ -97,7 +125,7 @@ export function prosCons(result: ScenarioResult, profile: Profile, rules: GepfRu
   const d = derive(result, profile, rules)
   const pros: string[] = []
   const cons: string[] = []
-  const a = profile.assumptions
+  const a = d.a
   const totals = result.totals
   const first = d.first
 
@@ -178,7 +206,7 @@ export function prosCons(result: ScenarioResult, profile: Profile, rules: GepfRu
       `Concentration: the pension is a promise by the South African state and the GEPF holds about ${pct(
         rules.status.offshoreAllocation,
         0,
-      )} of its ${formatRandCompact(rules.status.assetsRand)} of assets outside South Africa. Only ${formatRand(
+      )} of its ${bigRand(rules.status.assetsRand)} of assets outside South Africa. Only ${formatRand(
         result.atExit.investedOffshoreZar,
       )} of your own money (${pct(d.offshoreShare, 0)} of ${formatRand(capital)}) is offshore.`,
     )
@@ -216,11 +244,13 @@ export function prosCons(result: ScenarioResult, profile: Profile, rules: GepfRu
         result.atExit.investedOffshoreZar,
       )} of it (${pct(d.offshoreShare, 0)}) offshore and out of the rand, and you can change the fund, the fee and the drawdown at any time.`,
     )
-    pros.push(
-      `Whatever is left belongs to your estate: ${formatRand(totals.legacyAtHorizonReal)} in today's rand at age ${age(
-        d.planToAge,
-      )} (${formatRand(totals.legacyAtHorizon)} nominal), against nothing from a GEPF pension.`,
-    )
+    if (totals.legacyAtHorizon > 1) {
+      pros.push(
+        `Whatever is left belongs to your estate: ${formatRand(totals.legacyAtHorizonReal)} in today's rand at age ${age(
+          d.planToAge,
+        )} (${formatRand(totals.legacyAtHorizon)} nominal), against nothing from a GEPF pension, which stops when you and your spouse die.`,
+      )
+    }
     if (result.atRetirementFromPreservation) {
       const e = result.atRetirementFromPreservation
       pros.push(
@@ -332,7 +362,7 @@ function fromLibrary(id: string, detail: string, severity?: RiskFlag['severity']
  */
 export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfRules): RiskFlag[] {
   const d = derive(result, profile, rules)
-  const a = profile.assumptions
+  const a = d.a
   const out: (RiskFlag | null)[] = []
   const capital = result.atExit.investedCapital
   const offshoreShare = d.offshoreShare
@@ -382,9 +412,7 @@ export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfR
         'currency-collapse',
         `Your pension is paid in rand and the rand has lost roughly 5% a year against the dollar over 30 years (modelled here at ${pct(
           a.randDepreciation,
-        )}: R${a.usdZarSpot.toFixed(2)} today to R${(a.usdZarSpot * (1 + a.randDepreciation) ** Math.max(0, d.planToAge - profile.person.currentAge)).toFixed(
-          2,
-        )} by age ${age(d.planToAge)}). Only ${formatRand(result.atExit.investedOffshoreZar)} — ${pct(
+        )}: R${a.usdZarSpot.toFixed(2)} today to R${(a.usdZarSpot * (1 + a.randDepreciation) ** d.yearsToHorizon).toFixed(2)} by age ${age(d.planToAge)}). Only ${formatRand(result.atExit.investedOffshoreZar)} — ${pct(
           offshoreShare,
           0,
         )} of your ${formatRand(capital)} of investable capital — is outside the rand, and ${pct(
@@ -453,9 +481,9 @@ export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfR
             0,
           )} usually considered sustainable. This projection assumes a steady ${pct(
             a.localBalancedReturn,
-          )} local and ${pct(a.offshoreReturnUsd)} US-dollar return every year; a poor first five years would push the capital out ${
-            result.ruinAge === null ? 'of' : 'further out of'
-          } reach permanently.`,
+          )} local and ${pct(a.offshoreReturnUsd)} US-dollar return every year; a poor first five years would permanently reduce what this capital can pay${
+            result.ruinAge === null ? '' : `, and it is already exhausted at ${age(result.ruinAge)}`
+          }.`,
           d.firstDrawRate > SUSTAINABLE_DRAW.high ? 'critical' : 'warning',
         ),
       )
@@ -471,9 +499,9 @@ export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfR
             )} of your income is guaranteed for life.`
           : `Your capital is exhausted at age ${age(result.ruinAge)}, ${Math.round(
               d.planToAge - result.ruinAge,
-            )} years before the end of the plan, after which only ${formatRand(
-              finite(d.last?.totalNetIncome) / 12,
-            )} a month of other income remains. A GEPF pension would have paid for life, with ${pct(
+            )} years before the end of the plan, leaving ${
+              finite(d.last?.totalNetIncome) > 1 ? `only ${formatRand(finite(d.last?.totalNetIncome) / 12)} a month of other income` : 'no income at all'
+            } at age ${age(d.planToAge)}. A GEPF pension would have paid for life, with ${pct(
               profile.person.hasSpouse ? profile.person.spousePensionPct / 100 : 0,
               0,
             )} continuing to your spouse.`,

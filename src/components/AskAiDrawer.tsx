@@ -33,7 +33,7 @@ export function AskAiDrawer({ open, onClose }: { open: boolean; onClose: () => v
         aria-label="Ask AI"
         aria-hidden={!open}
         className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl transition-transform duration-200 ${
-          open ? 'translate-x-0' : 'translate-x-full'
+          open ? 'translate-x-0' : 'invisible translate-x-full'
         }`}
       >
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">

@@ -14,7 +14,7 @@ export function IndicatorCards({ indicators }: { indicators: SaRiskIndicator[] }
         const t = TREND_STYLE[ind.trend]
         return (
           <div key={ind.id} className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ind.label}</div>
               <Badge tone={t.tone}>
                 {t.arrow} {t.label}

@@ -80,7 +80,11 @@ export interface LumpSumTaxResult {
 // GEPF
 // ---------------------------------------------------------------------------
 
-/** Actuarial interest factor table: age -> factor (applied to the annual annuity). */
+/**
+ * Actuarial interest factor table: age -> F(Z). Per GEPF Rule 14.4, the resignation benefit
+ * (actuarial interest) = pensionable service (years) x final salary x F(Z), where Z is the member's
+ * age. The GEPF FAQ example gives F(40) = 0.2036 (10 years x R300,000 x 0.2036 = R610,800).
+ */
 export interface ActuarialFactorTable {
   /** Human label, e.g. 'GEPF factors effective 1 Oct 2025'. */
   label: string
@@ -160,10 +164,13 @@ export interface GepfRetirementBenefit {
 }
 
 export interface GepfResignationBenefit {
-  /** Actuarial interest = gratuity + annuity x factor(age). */
+  /** Actuarial interest = serviceYears x finalSalary x F(age). */
   actuarialInterest: number
+  /** F(Z) used (interpolated). */
   factorUsed: number
+  /** For information: the unreduced gratuity the member would get on retirement. */
   gratuityComponent: number
+  /** For information: actuarialInterest - gratuityComponent, i.e. the implied value placed on the annuity. */
   annuityComponent: number
   /** Two-pot split of the actuarial interest. */
   vestedComponent: number

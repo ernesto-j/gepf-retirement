@@ -1,43 +1,44 @@
 import type { ActuarialFactorTable, GepfRules } from '../engine/types'
 
 /**
- * GEPF rules and status. PRELIMINARY values pending verification by research/gepf.verified.md.
+ * GEPF rules and status. Values pending final verification by research/gepf*.md.
  * Formula constants come from the GEPF Rules (Government Employees Pension Law, 1996, Schedule 1).
  *
- * Actuarial interest factors: the GEPF revised its factors effective 1 October 2025 following the
- * 31 March 2024 statutory valuation; the Fund stated the new factors give values on average ~15% lower
- * than the 2021 factors. The point values below are ESTIMATES (confidence: low) used only when the member
- * has not entered the resignation value from their benefit statement. Replace with the published table.
+ * Actuarial interest (resignation value) per Rule 14.4: AI = pensionable service x final salary x F(Z),
+ * where F(Z) is an age factor set by the Board on the actuary's advice. The GEPF FAQ example gives
+ * F(40) = 0.2036 (10 years x R300,000 x 0.2036 = R610,800). The Fund revised its factors effective
+ * 1 October 2025 following the 31 March 2024 statutory valuation; the new factors give values on average
+ * ~15% lower than the 2021 factors. The full table (Appendix 8 of the valuation report) was not retrievable,
+ * so the curves below are ESTIMATES (confidence: low): the 2021 curve is anchored at F(40) = 0.2036 and
+ * shaped as F(z) = F(60) x 0.98^(60 - z) (a 2% p.a. net discount for the deferral to 60), which implies
+ * F(60) ≈ 0.305; the 2025 curve is 0.85 x the 2021 curve. Use your benefit statement value when available:
+ * it overrides these estimates.
  */
-const FACTORS_2025: ActuarialFactorTable = {
-  label: 'GEPF actuarial interest factors effective 1 Oct 2025 (estimated)',
-  effectiveFrom: '2025-10-01',
-  points: [
-    { age: 20, factor: 8.4 },
-    { age: 25, factor: 8.9 },
-    { age: 30, factor: 9.4 },
-    { age: 35, factor: 9.9 },
-    { age: 40, factor: 10.4 },
-    { age: 45, factor: 10.9 },
-    { age: 50, factor: 11.4 },
-    { age: 55, factor: 11.8 },
-    { age: 58, factor: 11.8 },
-    { age: 60, factor: 11.6 },
-    { age: 62, factor: 11.2 },
-    { age: 65, factor: 10.6 },
-  ],
-  source: 'https://gepf.co.za/the-government-employees-pension-fund-gepf-to-implement-revised-actuarial-factors-following-statutory-actuarial-valuation/',
-  confidence: 'low',
-  note: 'Estimated shape; GEPF states revised factors are ~15% lower on average than the 2021 factors. Use your benefit statement value when available.',
+function curve(ages: number[], f60: number): { age: number; factor: number }[] {
+  return ages.map((age) => {
+    const f = age <= 60 ? f60 * 0.98 ** (60 - age) : f60 * 0.99 ** (age - 60)
+    return { age, factor: Math.round(f * 10000) / 10000 }
+  })
 }
 
+const AGES = [20, 25, 30, 35, 40, 45, 50, 55, 58, 60, 62, 65]
+
 const FACTORS_2021: ActuarialFactorTable = {
-  label: 'GEPF actuarial interest factors 2021 (estimated)',
-  effectiveFrom: '2021-04-01',
-  points: FACTORS_2025.points.map((p) => ({ age: p.age, factor: Math.round((p.factor / 0.85) * 100) / 100 })),
-  source: 'https://gepf.co.za/wp-content/uploads/2025/09/Actuarial-Interest-Factors-FAQs.pdf',
+  label: 'GEPF actuarial interest factors, 2021 basis (effective 1 Nov 2022) — estimated curve',
+  effectiveFrom: '2022-11-01',
+  points: curve(AGES, 0.305),
+  source: 'https://www.gepf.co.za/frequently-asked-questions/',
   confidence: 'low',
-  note: 'Back-calculated from the 2025 estimate using the ~15% average reduction.',
+  note: 'Anchored at the GEPF FAQ example F(40) = 0.2036; shape is an estimate. Replace with the published Appendix 8 table if available.',
+}
+
+const FACTORS_2025: ActuarialFactorTable = {
+  label: 'GEPF actuarial interest factors effective 1 Oct 2025 — estimated (≈15% below 2021)',
+  effectiveFrom: '2025-10-01',
+  points: curve(AGES, 0.305 * 0.85),
+  source: 'https://gepf.co.za/clarification-on-the-implementation-of-revised-actuarialinterest-factors-as-at-1-october-2025/',
+  confidence: 'low',
+  note: 'GEPF states the revised factors are on average 15% lower than the 2021 factors. Use your benefit statement value when available.',
 }
 
 export const GEPF_RULES: GepfRules = {
@@ -62,7 +63,7 @@ export const GEPF_RULES: GepfRules = {
   actuarialFactors: FACTORS_2025,
   previousActuarialFactors: FACTORS_2021,
   status: {
-    fundingLevel: 1.10,
+    fundingLevel: 1.19,
     valuationDate: '2024-03-31',
     assetsRand: 2_400_000_000_000,
     memberCount: 1_270_000,
@@ -80,6 +81,7 @@ export const GEPF_RULES: GepfRules = {
   },
   sources: [
     'https://www.gepf.co.za/',
+    'https://www.gepf.co.za/frequently-asked-questions/',
     'https://gepf.co.za/wp-content/uploads/2025/09/Actuarial-Interest-Factors-FAQs.pdf',
     'https://www.gepf.co.za/wp-content/uploads/2023/03/GEPF-Rules.pdf',
   ],

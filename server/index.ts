@@ -103,7 +103,7 @@ app.post('/api/ask', async (req: Request, res: Response) => {
   }
 
   req.on('close', () => stream?.abort())
-  stream.on('text', (delta) => send({ delta }))
+  stream.on('text', (delta: string) => send({ delta }))
 
   try {
     const final = await stream.finalMessage()

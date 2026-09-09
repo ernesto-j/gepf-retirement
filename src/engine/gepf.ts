@@ -328,7 +328,12 @@ export function calcGepfResignationBenefit(
  */
 export function deriveServiceYearsBeforeTwoPot(m: GepfMembership, serviceYearsAtExit: number, rules: GepfRules, today: string = TODAY): number {
   const explicit = nonNegative(m.serviceYearsBeforeTwoPot)
-  const yearsSinceTwoPot = Math.max(0, yearsBetween(rules.twoPotStartDate, today))
+  // BUGFIX: `today` is part of the public signature and was used unvalidated, so an invalid
+  // ISO string (e.g. from a bad statement date) produced NaN via yearsBetween -> Math.max(0, NaN)
+  // -> NaN all the way through the clamp below, contradicting this module's own "never NaN" rule.
+  // Every other date here goes through `validIsoDate` first; this one now does too.
+  const safeToday = validIsoDate(today) ?? TODAY
+  const yearsSinceTwoPot = Math.max(0, yearsBetween(rules.twoPotStartDate, safeToday))
   const derived = explicit ?? Math.max(0, num(m.pensionableServiceYearsNow) - yearsSinceTwoPot)
   return clamp(derived, 0, Math.max(0, num(serviceYearsAtExit)))
 }

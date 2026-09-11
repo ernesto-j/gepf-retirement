@@ -96,6 +96,35 @@ export interface ActuarialFactorTable {
   note?: string
 }
 
+/**
+ * Terms of one DPSA exit programme (see `GepfRules.exitProgramme`). The once-off incentive is
+ * `weeksFirstYears` weeks of basic salary for each of the first `firstYears` completed years of
+ * pensionable service and `weeksThereafter` weeks for every completed year after that.
+ */
+export interface ExitProgrammeTerms {
+  /** Youngest age at exit that qualifies (whole years, inclusive). */
+  minAge: number
+  /** Oldest age at exit that qualifies (whole years, inclusive: 59 means "up to your 60th birthday"). */
+  maxAge: number
+  weeksFirstYears: number
+  firstYears: number
+  weeksThereafter: number
+}
+
+/** Which DPSA exit programme the member has been approved for (default `'none'`). */
+export type ExitProgrammeChoice = 'none' | 'erp' | 'vep'
+
+/** Result of the ERP / VEP incentive calculation (see `exitProgrammeIncentive` in src/engine/gepf.ts). */
+export interface ExitProgrammeIncentive {
+  eligible: boolean
+  /** Weeks of basic salary payable (0 when not eligible). */
+  weeks: number
+  /** weeks / 52 x annual basic salary at exit (R, before tax). */
+  gross: number
+  /** Why the member does not qualify (only when `eligible` is false). */
+  reason?: string
+}
+
 export interface GepfRules {
   /** Gratuity = gratuityFactor x finalSalary x serviceYears. (0.0672) */
   gratuityFactor: number
@@ -125,6 +154,20 @@ export interface GepfRules {
   /** Post-retirement employer medical subsidy rule of thumb. */
   medicalSubsidyMinServiceYears: number
   medicalSubsidyMaxMonthly: number
+  /**
+   * DPSA Incentivised Early Retirement Programme (ERP, ages 55-59: retirement without the
+   * early-retirement reduction plus a once-off incentive) and Voluntary Exit Programme (VEP,
+   * ages 60-63: normal retirement plus a once-off incentive), per DPSA Circular 38 of 2025.
+   * Both need 10+ years' pensionable service (`minServiceYearsForPension`), are open to
+   * permanent employees only and are approved at the Executive Authority's discretion.
+   */
+  exitProgramme: {
+    erp: ExitProgrammeTerms
+    vep: ExitProgrammeTerms
+    /** Last date on which an approved exit may take effect (end of the implementation period). */
+    implementationEnd: string
+    source: string
+  }
   actuarialFactors: ActuarialFactorTable
   /** Previous (2021) factors for comparison, if known. */
   previousActuarialFactors?: ActuarialFactorTable
@@ -238,6 +281,13 @@ export interface GepfMembership {
   /** Previously received retirement-fund lump sums (for aggregation), R. */
   previousLumpSumsWithdrawal: number
   previousLumpSumsRetirement: number
+  /**
+   * DPSA exit programme the member has been APPROVED for (Circular 38 of 2025): `'erp'`
+   * (Incentivised Early Retirement, ages 55-59, no early-retirement reduction + incentive),
+   * `'vep'` (Voluntary Exit, ages 60-63, incentive only) or `'none'` (the default).
+   * Approval is at the Executive Authority's discretion, so this is an input, not a derivation.
+   */
+  exitProgramme?: ExitProgrammeChoice
 }
 
 export type HousingStatus = 'owned' | 'bonded' | 'renting'
@@ -463,6 +513,15 @@ export interface ScenarioResult {
     investedCapital: number
     investedOffshoreZar: number
     forfeitedMedicalSubsidyPv: number
+    /**
+     * DPSA ERP / VEP once-off incentive at exit (retirement routes only, absent when no
+     * programme applies): weeks of basic salary, the gross amount, the tax expected on it
+     * (retirement lump-sum table, aggregated after the gratuity) and the net.
+     */
+    incentiveWeeks?: number
+    incentiveGross?: number
+    incentiveTax?: number
+    incentiveNet?: number
   }
   /** Second lump-sum event when retiring from the preservation fund (resign routes). */
   atRetirementFromPreservation?: {

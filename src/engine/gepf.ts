@@ -13,12 +13,16 @@
  *   < 10 years: gratuity = 0.15 x FS x N (proxy for the actuarial interest), no annuity
  *   early retirement (55-59, no exemption): x (1 - months before 60 x 1/300)
  *   resignation: actuarial interest = N x FS x F(age)   (GEPF Rule 14.4; FAQ example F(40) = 0.2036)
+ *   DPSA ERP / VEP (Circular 38 of 2025): once-off incentive of weeks/52 x basic salary at exit,
+ *                and, for the ERP (55-59), no early-retirement reduction at all
  * where FS = average pensionable salary over the last 24 months and N = pensionable service.
  * `gratuityComponent` reports the unreduced gratuity and `annuityComponent` the remainder, i.e. the
  * value the factor implicitly places on the annuity.
  */
 import type {
   ActuarialFactorTable,
+  ExitProgrammeChoice,
+  ExitProgrammeIncentive,
   GepfBenefitInput,
   GepfMembership,
   GepfResignationBenefit,
@@ -144,6 +148,64 @@ export function projectServiceAndSalary(
   const salaryAtExit = salaryNow * (1 + g) ** n
   const finalSalaryAnnual = n < 1 ? salaryNow : salaryNow * (1 + g) ** (n - 1) * ((2 + g) / 2)
   return { serviceYears, finalSalaryAnnual, salaryAtExit }
+}
+
+// ---------------------------------------------------------------------------
+// DPSA exit programmes (Circular 38 of 2025): ERP and VEP
+// ---------------------------------------------------------------------------
+
+/**
+ * Once-off incentive under the DPSA Incentivised Early Retirement Programme (ERP, ages 55-59)
+ * or Voluntary Exit Programme (VEP, ages 60-63), per DPSA Circular 38 of 2025 and the
+ * Determination and Directive of October 2025 (s16(6) and s5(5) of the Public Service Act).
+ *
+ *   weeks = weeksFirstYears x min(completed years, firstYears) + weeksThereafter x the rest
+ *   gross = weeks / 52 x annual basic (pensionable) salary at exit
+ *
+ * ERP: 2 weeks per year for the first 20 years, 1 week per completed year thereafter, and the
+ * 1/3% per month early-retirement reduction is waived (National Treasury funds the penalty).
+ * VEP: 2 weeks per year for the first 10 years, 1 week per completed year thereafter; at 60+
+ * no reduction applies in any case.
+ *
+ * Both need 10+ years' pensionable service (`rules.minServiceYearsForPension`) and are open to
+ * permanent employees only. Approval is at the Executive Authority's discretion and is NOT
+ * automatic, so `programme` is the member's own statement that they have been approved — this
+ * function only checks the age band and service test.
+ *
+ * SIMPLIFICATION: service is taken to the COMPLETED year (the circular pays per completed year
+ * of pensionable service) and the age band is read off the whole age at exit, so someone who is
+ * 59 years and 11 months at exit still qualifies for the ERP. Ineligible inputs return zero
+ * weeks and a `reason` rather than throwing.
+ */
+export function exitProgrammeIncentive(
+  rules: GepfRules,
+  programme: ExitProgrammeChoice | undefined,
+  ageAtExit: number,
+  serviceYears: number,
+  basicSalaryAnnual: number,
+): ExitProgrammeIncentive {
+  const none = (reason: string): ExitProgrammeIncentive => ({ eligible: false, weeks: 0, gross: 0, reason })
+  if (programme !== 'erp' && programme !== 'vep') return none('No DPSA exit programme applies to this exit.')
+  const terms = programme === 'erp' ? rules.exitProgramme.erp : rules.exitProgramme.vep
+  const label = programme === 'erp' ? 'ERP' : 'VEP'
+
+  const age = num(ageAtExit, -1)
+  const wholeAge = Math.floor(age + 1e-9)
+  if (wholeAge < terms.minAge || wholeAge > terms.maxAge) {
+    return none(`The ${label} applies to exits between ages ${terms.minAge} and ${terms.maxAge}; this exit is at age ${Math.max(0, Math.round(age))}.`)
+  }
+
+  const years = Math.max(0, num(serviceYears))
+  const minService = Math.max(0, num(rules.minServiceYearsForPension, 10))
+  if (years < minService - 1e-9) {
+    return none(`The ${label} needs ${minService} years' pensionable service; this exit has ${years.toFixed(1)}.`)
+  }
+
+  const completed = Math.floor(years + 1e-9)
+  const first = Math.min(completed, Math.max(0, num(terms.firstYears)))
+  const weeks = Math.max(0, num(terms.weeksFirstYears)) * first + Math.max(0, num(terms.weeksThereafter)) * Math.max(0, completed - first)
+  const gross = (weeks / 52) * Math.max(0, num(basicSalaryAnnual))
+  return { eligible: true, weeks, gross }
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +439,10 @@ function statementTwoPotShares(st: GepfStatementValues): { vested: number; savin
  * `deriveServiceYearsBeforeTwoPot`) and applies the formula functions above. The spouse
  * pension uses `person.spousePensionPct` (0 when `hasSpouse` is false).
  *
+ * Both paths also report `salaryAtExit` and the DPSA `incentive` (see `exitProgrammeIncentive`):
+ * when `gepf.exitProgramme` is `'erp'` and the exit qualifies, the early-retirement reduction is
+ * waived (`deps.exemptFromEarlyReduction`, when given, still overrides this either way).
+ *
  * Statement path (`source: 'statement'`), when `gepf.useStatementValues` and the statement
  * carries at least one of `resignationBenefit`, `retirementGratuity`,
  * `retirementAnnuityAnnual`:
@@ -407,7 +473,17 @@ export function gepfBenefitsAtExit(
   exitAge: number,
   rules: GepfRules,
   deps?: GepfBenefitsDeps,
-): { retirement: GepfRetirementBenefit; resignation: GepfResignationBenefit; serviceYears: number; finalSalaryAnnual: number; source: 'formula' | 'statement' } {
+): {
+  retirement: GepfRetirementBenefit
+  resignation: GepfResignationBenefit
+  serviceYears: number
+  finalSalaryAnnual: number
+  /** Basic (pensionable) salary in the last year before exit — the base for the ERP / VEP incentive. */
+  salaryAtExit: number
+  /** DPSA ERP / VEP once-off incentive for this exit (`eligible: false` when no programme applies). */
+  incentive: ExitProgrammeIncentive
+  source: 'formula' | 'statement'
+} {
   const today = validIsoDate(deps?.today) ?? TODAY
   const m = profile.gepf
   const person = profile.person
@@ -415,11 +491,17 @@ export function gepfBenefitsAtExit(
   const yearsToExit = Math.max(0, num(exitAge, currentAge) - currentAge)
   const ageAtExit = currentAge + yearsToExit
 
-  const { serviceYears, finalSalaryAnnual } = projectServiceAndSalary(m, currentAge, ageAtExit)
+  const { serviceYears, finalSalaryAnnual, salaryAtExit } = projectServiceAndSalary(m, currentAge, ageAtExit)
   const serviceYearsBeforeTwoPot = deriveServiceYearsBeforeTwoPot(m, serviceYears, rules, today)
   const preShare = twoPotPreShare(serviceYearsBeforeTwoPot, serviceYears)
   const spousePensionPct = person.hasSpouse ? num(person.spousePensionPct, rules.spousePensionDefault * 100) : 0
-  const exempt = deps?.exemptFromEarlyReduction
+  // DPSA exit programme: the incentive is paid on the basic salary at exit, and an approved ERP
+  // exit (55-59, 10+ years) retires WITHOUT the early-retirement reduction — National Treasury
+  // funds the penalty. An explicit `deps.exemptFromEarlyReduction` (employer-initiated /
+  // ill-health) still wins either way.
+  const programme = m.exitProgramme ?? 'none'
+  const incentive = exitProgrammeIncentive(rules, programme, ageAtExit, serviceYears, salaryAtExit)
+  const exempt = deps?.exemptFromEarlyReduction ?? (programme === 'erp' && incentive.eligible)
 
   const postTwoPotYears = Math.max(0, serviceYears - serviceYearsBeforeTwoPot)
   const annuityServiceYears = serviceYears - postTwoPotYears / 3
@@ -437,6 +519,8 @@ export function gepfBenefitsAtExit(
       resignation: resignationFromUnreduced(formula, ageAtExit, preShare, rules),
       serviceYears,
       finalSalaryAnnual,
+      salaryAtExit,
+      incentive,
       source: 'formula',
     }
   }
@@ -512,5 +596,5 @@ export function gepfBenefitsAtExit(
     resignation.maxCashOnResignation = resignation.vestedComponent + resignation.savingsComponent
   }
 
-  return { retirement, resignation, serviceYears, finalSalaryAnnual, source: 'statement' }
+  return { retirement, resignation, serviceYears, finalSalaryAnnual, salaryAtExit, incentive, source: 'statement' }
 }

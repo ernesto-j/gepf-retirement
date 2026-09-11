@@ -110,6 +110,25 @@ export const GEPF_RULES: GepfRules = {
   // their scheme) is derived at ~R4,009 (Jan) / ~R4,029 (Apr) — medium confidence, not read directly
   // off the determination.
   medicalSubsidyMaxMonthly: 4_029,
+  // DPSA "Incentivised Early Retirement Programme (ERP) without pension penalisation and
+  // Voluntary Exit Programme (VEP)", Circular 38 of 2025 with the Determination and Directive of
+  // October 2025 made under s16(6) and s5(5) of the Public Service Act. Implementation period
+  // 1 Oct 2025 - 31 Mar 2027: phase 1 applications 15 Oct - 30 Nov 2025 for exits by 31 Mar 2026,
+  // phase 2 applications 1 Apr - 30 Sep 2026 for exits by 31 Mar 2027. Permanent employees with
+  // 10+ years' pensionable service; approval is at the Executive Authority's discretion and is NOT
+  // automatic; National Treasury funds the penalty waiver and the incentives; accepting precludes
+  // re-employment in the public service; the post-retirement medical subsidy continues per the
+  // DPSA medical assistance determination.
+  //   ERP (55-59): retirement WITHOUT the 1/3% per month reduction, plus 2 weeks' basic salary per
+  //   year for the first 20 years of pensionable service and 1 week per completed year thereafter.
+  //   VEP (60-63): normal retirement (no reduction applies anyway) plus 2 weeks per year for the
+  //   first 10 years and 1 week per completed year thereafter.
+  exitProgramme: {
+    erp: { minAge: 55, maxAge: 59, weeksFirstYears: 2, firstYears: 20, weeksThereafter: 1 },
+    vep: { minAge: 60, maxAge: 63, weeksFirstYears: 2, firstYears: 10, weeksThereafter: 1 },
+    implementationEnd: '2027-03-31',
+    source: 'https://www.dpsa.gov.za/dpsa2g/documents/cos/2025/Circular%2038%20of%202025.pdf',
+  },
   actuarialFactors: FACTORS_2025,
   previousActuarialFactors: FACTORS_2021,
   status: {
@@ -149,5 +168,6 @@ export const GEPF_RULES: GepfRules = {
     'https://www.dpsa.gov.za/dpsa2g/documents/cos/2025/17_12_P_12_12_2025_A%20REVISED%20DETERMINATION%20AND%20DIRECTIVE%20ON%20MEDICAL%20ASSISTANCE%20FOR%20EMPLOYEES%20IN%20THE%20PUBLIC%20SERVICE%20-%202026.pdf',
     'https://www.gepf.co.za/the-government-employees-pension-fund-pensioners-will-receive-a-3-5-annual-pension-increase-as-of-1-april-2026/',
     'https://www.gepf.co.za/wp-content/uploads/2023/03/GEPF-Rules.pdf',
+    'https://www.dpsa.gov.za/dpsa2g/documents/cos/2025/Circular%2038%20of%202025.pdf',
   ],
 }

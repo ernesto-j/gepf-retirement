@@ -411,7 +411,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   }
 
   const benefits = gepfBenefitsAtExit(profile, exitAge, rules)
-  const { retirement, resignation, serviceYears, finalSalaryAnnual } = benefits
+  const { retirement, resignation, serviceYears, finalSalaryAnnual, incentive } = benefits
   if (benefits.source === 'statement') notes.push('GEPF values come from your benefit statement, grown to the exit age at your salary-growth assumption.')
   if (rules.actuarialFactors.confidence !== 'high') {
     notes.push(`Resignation values use ${rules.actuarialFactors.label} (confidence: ${rules.actuarialFactors.confidence}). Override them with your benefit statement.`)
@@ -448,6 +448,10 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   let lumpSumTax = 0
   let lumpSumNet = 0
   let lumpSumTable: ScenarioResult['atExit']['lumpSumTable'] = 'none'
+  // DPSA ERP / VEP once-off incentive (retirement routes only; 0 when no programme applies).
+  let incentiveGross = 0
+  let incentiveTax = 0
+  let incentiveNet = 0
   let transferredToPreservation = 0
   let pensionYear0 = 0
   let medicalSubsidyToday = 0
@@ -518,8 +522,43 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
       if (!subsidyEligible && gepf.medicalSubsidyEligible) {
         notes.push(`The medical subsidy needs ${rules.medicalSubsidyMinServiceYears} years of service; this exit has ${serviceYears.toFixed(1)}.`)
       }
+
+      // DPSA exit programme (Circular 38 of 2025): the once-off incentive is a second lump-sum
+      // event at exit. From age 55 an employer lump sum on termination is a "severance benefit"
+      // under the Income Tax Act, so it is taxed on the RETIREMENT lump-sum table and aggregated
+      // with the lump sums already taken — here, immediately after the gratuity.
+      if (incentive.eligible && incentive.gross > 0) {
+        const programme = gepf.exitProgramme === 'vep' ? 'VEP' : 'ERP'
+        incentiveGross = incentive.gross
+        const ist = calcRetirementLumpSumTax(incentiveGross, previousLumpSums, tables)
+        incentiveTax = ist.tax
+        incentiveNet = ist.net
+        previousLumpSums += incentiveGross
+        notes.push(
+          `DPSA ${programme} incentive of ${incentive.weeks} weeks' basic salary = ${formatNote(incentiveGross)}, taxed as a severance benefit on the retirement lump-sum table (aggregated after the gratuity): ${formatNote(
+            incentiveTax,
+          )} tax, ${formatNote(incentiveNet)} net${
+            gepf.exitProgramme === 'erp' ? ', and no early-retirement reduction applied' : ''
+          }. Expected treatment: severance benefit table — confirm with the IRP3(a) directive.`,
+        )
+        extraFlags.push({
+          id: 'exit-programme',
+          severity: 'info',
+          title: `DPSA ${programme} incentive of ${formatNote(incentiveGross)} is included`,
+          detail: `This route assumes your ${programme} application under DPSA Circular 38 of 2025 is APPROVED — approval is at the Executive Authority's discretion and is not automatic, and the exit must take effect by ${rules.exitProgramme.implementationEnd}. The incentive is ${incentive.weeks} weeks' basic salary (${formatNote(
+            incentiveGross,
+          )} gross, ${formatNote(incentiveTax)} expected tax, ${formatNote(incentiveNet)} net)${
+            gepf.exitProgramme === 'erp'
+              ? `, and the ${retirement.monthsEarly}-month early-retirement reduction is waived — National Treasury funds the penalty`
+              : ''
+          }. Accepting precludes re-employment in the public service; the post-retirement medical subsidy continues per the DPSA medical assistance determination.`,
+          appliesTo: ['stay-gepf'],
+        })
+      } else if (incentive.reason && (gepf.exitProgramme === 'erp' || gepf.exitProgramme === 'vep')) {
+        notes.push(`No DPSA exit-programme incentive is included: ${incentive.reason}`)
+      }
     }
-    addPot('Invested gratuity', 'discretionary', afterOnceOff(lumpSumNet), fraction(def.gratuityOffshorePct ?? def.offshorePct), fee, true)
+    addPot('Invested gratuity', 'discretionary', afterOnceOff(lumpSumNet + incentiveNet), fraction(def.gratuityOffshorePct ?? def.offshorePct), fee, true)
   } else if (def.kind === 'resign-preserve') {
     transferredToPreservation = nonNeg(resignation.actuarialInterest)
     lumpSumTable = 'none'

@@ -3,10 +3,10 @@
  * (orange), leave-cash / offshore series 3 (blue). Keep colours consistent across pages.
  */
 export const SERIES = {
-  stay: '#2f7f6d',
+  stay: '#0e8c62',
   preserve: '#c2410c',
   cash: '#1d4ed8',
-  s4: '#7c3aed',
+  s4: '#a21caf',
   s5: '#b45309',
   s6: '#0e7490',
   target: '#64748b',

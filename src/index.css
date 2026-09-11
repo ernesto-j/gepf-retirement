@@ -15,10 +15,10 @@
   --color-brand-800: #173c35;
   --color-brand-900: #10281f;
   /* Categorical chart palette (colour-blind safe, distinct in light and dark) */
-  --color-series-1: #2f7f6d; /* GEPF / stay  */
+  --color-series-1: #0e8c62; /* GEPF / stay  */
   --color-series-2: #c2410c; /* leave-preserve */
   --color-series-3: #1d4ed8; /* leave-cash / offshore */
-  --color-series-4: #7c3aed;
+  --color-series-4: #a21caf;
   --color-series-5: #b45309;
   --color-series-6: #0e7490;
   --color-ok: #15803d;

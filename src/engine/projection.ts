@@ -78,6 +78,13 @@
  * 10. When money is retired out of a preservation fund the lump-sum tax leaves the system in
  *     that year: `capitalStart` for that year is measured AFTER the event, so the capital
  *     line steps down by the tax paid.
+ * 11. DPSA ERP / VEP (Circular 38 of 2025): the once-off incentive is a SECOND lump-sum event at
+ *     exit on the retirement routes only, taxed on the retirement lump-sum table aggregated
+ *     immediately after the gratuity (the "severance benefit" treatment that applies to an
+ *     employer termination lump sum from age 55) and invested alongside the net gratuity. The
+ *     programme is assumed APPROVED whenever `gepf.exitProgramme` says so — approval is at the
+ *     Executive Authority's discretion — and the tax treatment is the expected one, to be
+ *     confirmed with the IRP3(a) directive.
  */
 import type {
   Assumptions,
@@ -591,6 +598,12 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     )
   }
 
+  if (def.kind !== 'stay-gepf' && (gepf.exitProgramme === 'erp' || gepf.exitProgramme === 'vep')) {
+    notes.push(
+      `The DPSA ${gepf.exitProgramme === 'vep' ? 'VEP' : 'ERP'} applies to RETIREMENT, not resignation: this route pays no once-off incentive and, on the ERP, no early-retirement reduction is waived because resignation is never reduced in the first place.`,
+    )
+  }
+
   // Other savings are part of every route.
   const otherSavings = afterOnceOff(nonNeg(lifestyle.otherSavings))
   addPot('Other savings', 'discretionary', otherSavings, fraction(lifestyle.otherSavingsOffshorePct), fee, true)
@@ -850,6 +863,14 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
       investedCapital: finite(investedCapital),
       investedOffshoreZar: finite(investedOffshoreZar),
       forfeitedMedicalSubsidyPv: finite(forfeitedMedicalSubsidyPv),
+      ...(incentiveGross > 0
+        ? {
+            incentiveWeeks: finite(incentive.weeks),
+            incentiveGross: finite(incentiveGross),
+            incentiveTax: finite(incentiveTax),
+            incentiveNet: finite(incentiveNet),
+          }
+        : {}),
     },
     atRetirementFromPreservation,
     firstYear: {
@@ -867,7 +888,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     totals: {
       lifetimeNetIncomeNominal: finite(lifetimeNetIncomeNominal),
       lifetimeNetIncomeReal: finite(pvNetIncome),
-      lifetimeTaxPaid: finite(lifetimeIncomeTax + lifetimeReturnTax + commutationTax + lumpSumTax + lumpSumTaxAtRetirement),
+      lifetimeTaxPaid: finite(lifetimeIncomeTax + lifetimeReturnTax + commutationTax + lumpSumTax + incentiveTax + lumpSumTaxAtRetirement),
       lifetimeFeesPaid: finite(lifetimeFees),
       pvNetIncome: finite(pvNetIncome),
       legacyAtHorizon: finite(last?.capitalEnd ?? 0),
@@ -939,14 +960,14 @@ const METRICS: MetricSpec[] = [
     label: 'Net lump sum at exit',
     format: 'currency',
     higherIsBetter: true,
-    value: (r) => r.atExit.lumpSumNet + (r.atRetirementFromPreservation?.lumpSumNet ?? 0),
+    value: (r) => r.atExit.lumpSumNet + (r.atExit.incentiveNet ?? 0) + (r.atRetirementFromPreservation?.lumpSumNet ?? 0),
   },
   {
     key: 'lumpSumTax',
     label: 'Tax on lump sums',
     format: 'currency',
     higherIsBetter: false,
-    value: (r) => r.atExit.lumpSumTax + (r.atRetirementFromPreservation?.lumpSumTax ?? 0),
+    value: (r) => r.atExit.lumpSumTax + (r.atExit.incentiveTax ?? 0) + (r.atRetirementFromPreservation?.lumpSumTax ?? 0),
   },
   { key: 'investedCapital', label: 'Capital invested at exit', format: 'currency', higherIsBetter: true, value: (r) => r.atExit.investedCapital },
   { key: 'firstYearNetIncome', label: 'Net income, first year', format: 'currencyMonthly', higherIsBetter: true, value: (r) => r.firstYear.netMonthlyIncome },
@@ -1009,8 +1030,8 @@ export function summarise(result: ScenarioResult): ScenarioSummary {
     exitAge: result.atExit.age,
     fundId: result.definition.fundId,
     offshorePct: result.definition.offshorePct,
-    lumpSumNet: result.atExit.lumpSumNet + (result.atRetirementFromPreservation?.lumpSumNet ?? 0),
-    lumpSumTax: result.atExit.lumpSumTax + (result.atRetirementFromPreservation?.lumpSumTax ?? 0),
+    lumpSumNet: result.atExit.lumpSumNet + (result.atExit.incentiveNet ?? 0) + (result.atRetirementFromPreservation?.lumpSumNet ?? 0),
+    lumpSumTax: result.atExit.lumpSumTax + (result.atExit.incentiveTax ?? 0) + (result.atRetirementFromPreservation?.lumpSumTax ?? 0),
     investedCapital: result.atExit.investedCapital,
     firstYearNetMonthlyIncome: result.firstYear.netMonthlyIncome,
     firstYearMonthlyTax: result.firstYear.monthlyTax,

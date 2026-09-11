@@ -27,6 +27,8 @@ export const DEFAULT_GEPF: GepfMembership = {
   useStatementValues: false,
   previousLumpSumsWithdrawal: 0,
   previousLumpSumsRetirement: 0,
+  // DPSA ERP / VEP (Circular 38 of 2025): opt in only once the Executive Authority has approved.
+  exitProgramme: 'none',
 }
 
 export const DEFAULT_LIFESTYLE: LifestyleInputs = {

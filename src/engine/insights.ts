@@ -175,6 +175,28 @@ export function prosCons(result: ScenarioResult, profile: Profile, rules: GepfRu
       )
     }
 
+    // DPSA ERP / VEP (Circular 38 of 2025): the waived early-retirement reduction is worth a
+    // permanently higher pension AND gratuity; the incentive is once-off cash on top.
+    const incentive = d.benefits.incentive
+    if (incentive.eligible && incentive.gross > 0) {
+      const programme = profile.gepf.exitProgramme === 'vep' ? 'VEP' : 'ERP'
+      const waived = profile.gepf.exitProgramme === 'erp' ? d.benefits.retirement.monthsEarly * rules.earlyRetirementReductionPerMonth : 0
+      const net = finite(result.atExit.incentiveNet)
+      pros.push(
+        `Your approved DPSA ${programme} exit pays a once-off incentive of ${incentive.weeks} weeks' basic salary — ${formatRand(
+          incentive.gross,
+        )} gross${net > 0 ? `, ${formatRand(net)} after ${formatRand(finite(result.atExit.incentiveTax))} of expected tax` : ''} (expected treatment: severance benefit on the retirement lump-sum table, aggregated with your other lump sums — confirm with the IRP3(a) directive)${
+          waived > 0
+            ? `, and retiring at ${age(d.exitAge)} carries NO early-retirement reduction: the ${d.benefits.retirement.monthsEarly}-month penalty of ${pct(
+                waived,
+              )} of your pension and gratuity for life is waived and funded by National Treasury — about ${formatRand(
+                (pension * waived) / 12,
+              )} a month of pension, and ${formatRand(result.atExit.gratuity * waived)} of gratuity, that you would otherwise have lost`
+            : ''
+        }. The exit must take effect by ${rules.exitProgramme.implementationEnd} and approval is at the Executive Authority's discretion.`,
+      )
+    }
+
     const b = d.benefits.retirement
     if (b.monthsEarly > 0 && b.reductionFactor < 1) {
       const lostPension = (pension / Math.max(b.reductionFactor, 1e-9)) * (1 - b.reductionFactor)
@@ -396,6 +418,35 @@ export function riskFlags(result: ScenarioResult, profile: Profile, rules: GepfR
       ),
     )
     const b = d.benefits.retirement
+    // DPSA ERP (Circular 38 of 2025): a 55-59 member who has not applied is carrying a penalty
+    // that the programme would remove entirely, for as long as the window is open.
+    const erpAge = Math.floor(d.exitAge + 1e-9)
+    const programmeChoice = profile.gepf.exitProgramme ?? 'none'
+    if (
+      programmeChoice === 'none' &&
+      erpAge >= rules.exitProgramme.erp.minAge &&
+      erpAge <= rules.exitProgramme.erp.maxAge &&
+      b.monthsEarly > 0 &&
+      b.reductionFactor < 1 &&
+      d.benefits.serviceYears >= rules.minServiceYearsForPension
+    ) {
+      const waived = b.monthsEarly * rules.earlyRetirementReductionPerMonth
+      const terms = rules.exitProgramme.erp
+      const completed = Math.floor(d.benefits.serviceYears + 1e-9)
+      const weeks =
+        terms.weeksFirstYears * Math.min(completed, terms.firstYears) + terms.weeksThereafter * Math.max(0, completed - terms.firstYears)
+      out.push({
+        id: 'exit-programme-available',
+        severity: 'warning',
+        title: `The DPSA early-retirement programme would remove your ${b.monthsEarly}-month penalty`,
+        detail: `You are ${age(d.exitAge)} at exit and have chosen "no exit programme", so this route applies the full early-retirement reduction of ${b.monthsEarly} months (${pct(
+          waived,
+        )} of your gratuity and of your pension for life — ${formatRand(
+          (result.firstYear.gepfPensionMonthlyGross * waived) / Math.max(1 - waived, 1e-9),
+        )} a month). The DPSA Incentivised Early Retirement Programme (Circular 38 of 2025, ages ${terms.minAge}-${terms.maxAge} with ${rules.minServiceYearsForPension}+ years' service) retires you WITHOUT that reduction and adds a once-off incentive of about ${weeks} weeks' basic salary, if your Executive Authority approves the application and the exit takes effect by ${rules.exitProgramme.implementationEnd}. Approval is discretionary, not automatic; accepting precludes re-employment in the public service. Set "DPSA early-retirement / voluntary-exit programme" on the Profile page to model it.`,
+        appliesTo: ['stay-gepf'],
+      })
+    }
     if (b.monthsEarly > 0 && b.reductionFactor < 1) {
       out.push(
         fromLibrary(

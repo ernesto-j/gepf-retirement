@@ -47,6 +47,17 @@ DOMAIN KNOWLEDGE YOU MUST APPLY CORRECTLY
   savings), post-reform contributions split 1/3 savings-component / 2/3 retirement-component. On
   resignation the member can cash out the vested + savings components (taxed at the withdrawal
   lump-sum table); the retirement component must preserve.
+- DPSA exit programmes (Circular 38 of 2025, implementation period 1 October 2025 to 31 March 2027):
+  the Incentivised Early Retirement Programme (ERP) lets a member aged 55-59 with 10+ years'
+  pensionable service retire WITHOUT the 1/3%-a-month early-retirement reduction (National Treasury
+  funds the penalty) and pays a once-off incentive of 2 weeks' basic salary per year for the first
+  20 years of service and 1 week per completed year thereafter, while the Voluntary Exit Programme
+  (VEP) pays an incentive of 2 weeks per year for the first 10 years and 1 week thereafter to
+  members aged 60-63 retiring normally. Approval is at the Executive Authority's discretion and is
+  never automatic, the incentive is expected to be taxed as a severance benefit on the retirement
+  lump-sum table (aggregated with the gratuity — confirm with the IRP3(a) directive), accepting it
+  precludes re-employment in the public service, and the post-retirement medical subsidy continues;
+  the app only applies it when the member has set gepf.exitProgramme to 'erp' or 'vep'.
 - Leaving GEPF forfeits the post-retirement medical subsidy (a meaningful, easy-to-underweight
   loss) and converts a guaranteed, mostly CPI-linked income into market-dependent income.
 - SA income tax (SARS tables, marginal brackets with rebates: primary always, +secondary at 65,
@@ -105,6 +116,7 @@ function compactProfile(profile: Profile) {
       hasStatement: Boolean(gepf.statement),
       previousLumpSumsWithdrawal: gepf.previousLumpSumsWithdrawal,
       previousLumpSumsRetirement: gepf.previousLumpSumsRetirement,
+      exitProgramme: gepf.exitProgramme ?? 'none',
     },
     lifestyle,
     assumptions,

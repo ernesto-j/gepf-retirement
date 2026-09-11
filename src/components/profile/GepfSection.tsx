@@ -1,9 +1,16 @@
 import type { ReactNode } from 'react'
-import type { GepfMembership, GepfStatementValues, Profile } from '../../engine/types'
+import type { ExitProgrammeChoice, GepfMembership, GepfStatementValues, Profile } from '../../engine/types'
 import { gepfBenefitsAtExit, getGepfRules } from '../../engine/gepf'
 import { applyStatement } from '../../engine/statement'
-import { Badge, Callout, DataTable, Grid, KpiTile, NumberInput, P, PercentInput, R, RandInput, Section, Toggle, td, th } from '../../components/ui'
+import { calcRetirementLumpSumTax, getTaxTables } from '../../engine/tax'
+import { Badge, Callout, DataTable, Grid, KpiTile, NumberInput, P, PercentInput, R, RandInput, Section, SelectInput, Toggle, td, th } from '../../components/ui'
 import StatementUpload from '../StatementUpload'
+
+const EXIT_PROGRAMME_OPTIONS: { value: ExitProgrammeChoice; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'erp', label: 'ERP approved (55–59, no penalty + incentive)' },
+  { value: 'vep', label: 'VEP approved (60–63, incentive)' },
+]
 
 const STATEMENT_ROWS: { key: keyof GepfStatementValues; label: string; format?: (v: unknown) => string }[] = [
   { key: 'statementDate', label: 'Statement date' },
@@ -140,6 +147,21 @@ export function GepfSection({
           onChange={(v) => onChange({ previousLumpSumsRetirement: v })}
           help="Retirement/retrenchment/death lump sums previously received (affects tax aggregation)."
         />
+        <SelectInput<ExitProgrammeChoice>
+          label="DPSA early-retirement / voluntary-exit programme"
+          value={gepf.exitProgramme ?? 'none'}
+          options={EXIT_PROGRAMME_OPTIONS}
+          onChange={(v) => onChange({ exitProgramme: v })}
+          help={
+            <>
+              DPSA Circular 38 of 2025. ERP: exit at 55–59 with no 1/3%-a-month early-retirement reduction plus 2 weeks’ basic salary per year
+              for the first 20 years’ service and 1 week per completed year after that. VEP: exit at 60–63 with 2 weeks per year for the first
+              10 years and 1 week thereafter. Both need 10+ years’ pensionable service and a permanent post. Phase 1 applications closed
+              30 Nov 2025 (exits by 31 Mar 2026); phase 2 runs 1 Apr – 30 Sep 2026 for exits by 31 Mar 2027. Only set this once your Executive
+              Authority has approved you — approval is discretionary, not automatic, and accepting precludes re-employment in the public service.
+            </>
+          }
+        />
         <div className="flex flex-col gap-3">
           <Toggle
             label="Eligible for the post-retirement medical subsidy"
@@ -172,9 +194,15 @@ function GepfPreview({ profile }: { profile: Profile }) {
   let content: ReactNode
   try {
     const rules = getGepfRules()
-    const { retirement, resignation, serviceYears, finalSalaryAnnual, source } = gepfBenefitsAtExit(profile, exitAge, rules)
+    const { retirement, resignation, serviceYears, finalSalaryAnnual, incentive, source } = gepfBenefitsAtExit(profile, exitAge, rules)
     const prevAi = resignation.actuarialInterestPreviousFactors
     const pctDiff = prevAi && prevAi > 0 ? resignation.actuarialInterest / prevAi - 1 : null
+    // Same aggregation as the projection: the incentive is a severance benefit taxed on the
+    // retirement table immediately AFTER the gratuity.
+    const programme = profile.gepf.exitProgramme === 'vep' ? 'VEP' : 'ERP'
+    const tables = getTaxTables(profile.assumptions.taxYear)
+    const previous = Math.max(0, profile.gepf.previousLumpSumsWithdrawal) + Math.max(0, profile.gepf.previousLumpSumsRetirement)
+    const incentiveTax = incentive.eligible ? calcRetirementLumpSumTax(incentive.gross, previous + Math.max(0, retirement.gratuity), tables) : null
     content = (
       <>
         <Grid cols={4}>
@@ -183,7 +211,13 @@ function GepfPreview({ profile }: { profile: Profile }) {
           <KpiTile
             label="Monthly pension (before tax)"
             value={R(retirement.annuityMonthly)}
-            sub={retirement.monthsEarly > 0 ? `${retirement.monthsEarly} months early, factor ${P(retirement.reductionFactor)}` : 'No early-retirement reduction'}
+            sub={
+              retirement.monthsEarly > 0 && retirement.reductionFactor >= 1
+                ? `${retirement.monthsEarly} months early — reduction waived`
+                : retirement.monthsEarly > 0
+                  ? `${retirement.monthsEarly} months early, factor ${P(retirement.reductionFactor)}`
+                  : 'No early-retirement reduction'
+            }
           />
           <KpiTile label="Max cash on resignation" value={R(resignation.maxCashOnResignation)} sub="Vested + savings component" />
         </Grid>
@@ -201,6 +235,46 @@ function GepfPreview({ profile }: { profile: Profile }) {
             sub="Vested / savings / retirement"
           />
         </Grid>
+        {incentive.eligible && incentiveTax && (
+          <Grid cols={3} className="mt-3">
+            <KpiTile
+              label={`DPSA ${programme} incentive`}
+              value={R(incentive.gross)}
+              sub={`${incentive.weeks} weeks’ basic salary, gross`}
+              tone="ok"
+            />
+            <KpiTile
+              label="Expected tax on the incentive"
+              value={R(incentiveTax.tax)}
+              sub="severance benefit, retirement lump-sum table, aggregated after the gratuity"
+              tone="warn"
+            />
+            <KpiTile
+              label="Incentive after tax"
+              value={R(incentiveTax.net)}
+              sub={
+                profile.gepf.exitProgramme === 'erp'
+                  ? `Early-retirement reduction waived (${retirement.monthsEarly} months, factor ${P(retirement.reductionFactor)})`
+                  : 'No early-retirement reduction applies at 60+'
+              }
+              tone="ok"
+            />
+          </Grid>
+        )}
+        {profile.gepf.exitProgramme !== undefined && profile.gepf.exitProgramme !== 'none' && !incentive.eligible && (
+          <div className="mt-3">
+            <Callout tone="warn" title={`No ${programme} incentive at this exit age`}>
+              {incentive.reason}
+            </Callout>
+          </div>
+        )}
+        {incentive.eligible && (
+          <p className="mt-2 text-xs text-slate-500">
+            Tax treatment is the EXPECTED one — severance benefit on the retirement lump-sum table; confirm it with the IRP3(a) directive. The
+            exit must take effect by {rules.exitProgramme.implementationEnd} and approval by your Executive Authority is discretionary, not
+            automatic.
+          </p>
+        )}
         <p className="mt-2 text-xs text-slate-500">
           Source: <Badge tone={source === 'statement' ? 'brand' : 'neutral'}>{source === 'statement' ? 'your benefit statement' : 'formula estimate'}</Badge>{' '}
           {source === 'statement'

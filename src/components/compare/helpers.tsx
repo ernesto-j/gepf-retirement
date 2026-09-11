@@ -156,8 +156,11 @@ export function ageTile(age: number | null): { value: string; tone: 'ok' | 'warn
 
 /** Total lump-sum tax across the exit and any later retirement-from-preservation event. */
 export function lumpSumTaxSummary(r: ScenarioResult): { gross: number; tax: number; effective: number } {
-  const gross = r.atExit.lumpSumGross + (r.atRetirementFromPreservation?.lumpSumGross ?? 0)
-  const tax = r.atExit.lumpSumTax + (r.atRetirementFromPreservation?.lumpSumTax ?? 0)
+  // Includes the DPSA ERP / VEP incentive, which is a second lump sum at exit taxed on the same
+  // (retirement) table — the comparison table's "Net lump sum at exit" / "Tax on lump sums" rows
+  // aggregate it the same way.
+  const gross = r.atExit.lumpSumGross + (r.atExit.incentiveGross ?? 0) + (r.atRetirementFromPreservation?.lumpSumGross ?? 0)
+  const tax = r.atExit.lumpSumTax + (r.atExit.incentiveTax ?? 0) + (r.atRetirementFromPreservation?.lumpSumTax ?? 0)
   return { gross, tax, effective: gross > 0 ? tax / gross : 0 }
 }
 

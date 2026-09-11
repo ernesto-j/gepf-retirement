@@ -21,6 +21,12 @@ export function RouteCard({
   const shortfall = ageTile(result.incomeShortfallAge)
   const offshoreShare = atExit.investedCapital > 0 ? atExit.investedOffshoreZar / atExit.investedCapital : 0
   const later = result.atRetirementFromPreservation
+  // DPSA ERP / VEP once-off incentive (retirement routes only): a second lump sum at exit.
+  const incentiveNet = atExit.incentiveNet ?? 0
+  const incentiveNote =
+    atExit.incentiveGross !== undefined
+      ? ` + ${formatRandCompact(atExit.incentiveGross)} DPSA incentive (${atExit.incentiveWeeks} weeks' salary, net ${formatRandCompact(incentiveNet)})`
+      : ''
 
   return (
     <article className="card flex h-full flex-col" style={{ borderTopColor: colour, borderTopWidth: 4 }}>
@@ -44,13 +50,13 @@ export function RouteCard({
       <div className="grid grid-cols-2 gap-2">
         <KpiTile
           label="Net lump sum at exit"
-          value={formatRandCompact(atExit.lumpSumNet)}
+          value={formatRandCompact(atExit.lumpSumNet + incentiveNet)}
           sub={
             atExit.lumpSumTable === 'none'
-              ? `Nothing taken in cash; ${formatRandCompact(atExit.transferredToPreservation)} transferred tax-free`
-              : `${formatRandCompact(atExit.lumpSumGross)} gross on the ${atExit.lumpSumTable} table`
+              ? `Nothing taken in cash; ${formatRandCompact(atExit.transferredToPreservation)} transferred tax-free${incentiveNote}`
+              : `${formatRandCompact(atExit.lumpSumGross)} gross on the ${atExit.lumpSumTable} table${incentiveNote}`
           }
-          help="Cash received at exit after lump-sum tax, before once-off capital needs."
+          help="Cash received at exit after lump-sum tax, before once-off capital needs. Includes the DPSA ERP / VEP incentive when one applies (taxed as a severance benefit on the retirement table — confirm with the IRP3(a) directive)."
         />
         <KpiTile
           label="Tax on lump sum(s)"

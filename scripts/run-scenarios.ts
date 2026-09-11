@@ -103,6 +103,14 @@ console.log(`  gratuity ${formatRand(b.retirement.gratuity)}, pension ${formatRa
 console.log(`  resignation value ${formatRand(b.resignation.actuarialInterest)} (F=${b.resignation.factorUsed.toFixed(4)})` +
   (b.resignation.actuarialInterestPreviousFactors ? ` vs ${formatRand(b.resignation.actuarialInterestPreviousFactors)} on the previous factors` : ''))
 console.log(`  two-pot: vested ${formatRand(b.resignation.vestedComponent)}, savings ${formatRand(b.resignation.savingsComponent)}, retirement ${formatRand(b.resignation.retirementComponent)}`)
+if (b.incentive.eligible) {
+  console.log(
+    `  DPSA ${profile.gepf.exitProgramme === 'vep' ? 'VEP' : 'ERP'} incentive ${b.incentive.weeks} weeks' basic salary = ${formatRand(b.incentive.gross)}` +
+      ` (on ${formatRand(b.salaryAtExit)} salary at exit; taxed as a severance benefit on the retirement table)`,
+  )
+} else if (profile.gepf.exitProgramme === 'erp' || profile.gepf.exitProgramme === 'vep') {
+  console.log(`  DPSA exit programme: no incentive — ${b.incentive.reason}`)
+}
 
 function fmt(v: number | string | null, format: string): string {
   if (v === null || v === undefined) return '—'

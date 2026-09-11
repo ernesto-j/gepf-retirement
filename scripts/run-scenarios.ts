@@ -42,8 +42,26 @@ const defs = [...defaultScenarios(profile, FUNDS), ...(raw.scenarios ?? [])]
 const results = defs.map((d) => runScenario(profile, d, deps))
 const comparison = compareScenarios(results)
 
+const a0 = profile.assumptions
+const sensitivityVariants: { label: string; overrides: Partial<typeof a0> }[] = [
+  { label: 'base', overrides: {} },
+  { label: 'rand depreciation +2pp', overrides: { randDepreciation: a0.randDepreciation + 0.02 } },
+  { label: 'rand depreciation -2pp', overrides: { randDepreciation: Math.max(-0.05, a0.randDepreciation - 0.02) } },
+  { label: 'returns -2pp', overrides: { localBalancedReturn: a0.localBalancedReturn - 0.02, offshoreReturnUsd: a0.offshoreReturnUsd - 0.02 } },
+  { label: 'returns +2pp', overrides: { localBalancedReturn: a0.localBalancedReturn + 0.02, offshoreReturnUsd: a0.offshoreReturnUsd + 0.02 } },
+  { label: 'personal inflation +2pp', overrides: { personalInflation: a0.personalInflation + 0.02 } },
+  { label: 'GEPF increases 75% of CPI', overrides: { gepfIncreaseAsPctOfCpi: 0.75 } },
+]
+const sensitivities = sensitivityVariants.map((v) => ({
+  label: v.label,
+  results: defs.map((d) => {
+    const r = runScenario(profile, { ...d, overrides: { ...d.overrides, ...v.overrides } }, deps)
+    return { id: d.id, ruinAge: r.ruinAge, incomeShortfallAge: r.incomeShortfallAge, pvNetIncome: r.totals.pvNetIncome, legacyReal: r.totals.legacyAtHorizonReal }
+  }),
+}))
+
 if (args.includes('--json')) {
-  console.log(JSON.stringify({ profile, results }, null, 1))
+  console.log(JSON.stringify({ profile, results, sensitivities }, null, 1))
   process.exit(0)
 }
 
@@ -96,24 +114,11 @@ table(
 )
 
 console.log('\nSENSITIVITIES (ruin age / PV of net income in today\'s rand)')
-const a = profile.assumptions
-const variants: { label: string; overrides: Partial<typeof a> }[] = [
-  { label: 'base', overrides: {} },
-  { label: 'rand depreciation +2pp', overrides: { randDepreciation: a.randDepreciation + 0.02 } },
-  { label: 'rand depreciation -2pp', overrides: { randDepreciation: Math.max(-0.05, a.randDepreciation - 0.02) } },
-  { label: 'returns -2pp', overrides: { localBalancedReturn: a.localBalancedReturn - 0.02, offshoreReturnUsd: a.offshoreReturnUsd - 0.02 } },
-  { label: 'returns +2pp', overrides: { localBalancedReturn: a.localBalancedReturn + 0.02, offshoreReturnUsd: a.offshoreReturnUsd + 0.02 } },
-  { label: 'personal inflation +2pp', overrides: { personalInflation: a.personalInflation + 0.02 } },
-  { label: 'GEPF increases 75% of CPI', overrides: { gepfIncreaseAsPctOfCpi: 0.75 } },
-]
 table(
   ['Variant', ...results.map((r) => r.definition.name)],
-  variants.map((v) => [
+  sensitivities.map((v) => [
     v.label,
-    ...defs.map((d) => {
-      const r = runScenario(profile, { ...d, overrides: { ...d.overrides, ...v.overrides } }, deps)
-      return `${r.ruinAge === null ? 'lasts' : 'out @' + Math.round(r.ruinAge)} / ${formatRand(r.totals.pvNetIncome)}`
-    }),
+    ...v.results.map((r) => `${r.ruinAge === null ? 'lasts' : 'out @' + Math.round(r.ruinAge)} / ${formatRand(r.pvNetIncome)}`),
   ]),
 )
 

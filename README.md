@@ -47,6 +47,7 @@ The single-file build can be opened straight from disk or emailed. Its AI featur
 - Under 10 years: no pension; the actuarial interest (service × final salary × F(age)) is paid as a once-off gratuity.
 - Early retirement between 55 and 60 without employer approval: ⅓% reduction per month before 60.
 - Resignation at any age: actuarial interest = pensionable service × final salary × age-dependent factor F(age) (GEPF Rule 14.4), using the factors the GEPF introduced on **1 October 2025** (on average ~15% lower than the 2021 factors). The value under the previous factors is shown for comparison.
+- DPSA early-retirement (ERP, 55–59: reduction waived plus 2 weeks' salary per year for the first 20 years, 1 week thereafter) and voluntary-exit (VEP, 60–63: 2 weeks per year for the first 10 years, 1 week thereafter) programme incentives, taxed as severance benefits, when selected on the Profile page (Circular 38 of 2025; exits by 31 March 2027).
 - Two-pot split of the actuarial interest: vested (pre-September-2024 accrual, less the 10%/R30,000 seed), savings (seed + ⅓ of later accrual) and retirement (⅔ of later accrual). On resignation you may cash the vested and savings components; the retirement component must be preserved.
 
 ### Tax (engine/tax.ts)
@@ -67,7 +68,7 @@ Flags are generated per scenario (withdrawal tax, medical-subsidy forfeiture, ea
 
 ## Data and sources
 
-All data files in `src/data/` carry `asOf` dates and source URLs. Research notes with sources and the adversarial verification reports are in `research/`. Values marked `confidence: 'low'` (notably the exact actuarial-interest factor table) are estimates — use the resignation value from your own benefit statement, which overrides the formula.
+All data files in `src/data/` carry `asOf` dates and source URLs. Fund returns marked ≈ (`returnsConfidence: 'approximate'`) are labelled estimates used so the fund-history comparison can run where a fact sheet could not be fetched; replace them from the fund's minimum disclosure document. Research notes with sources and the adversarial verification reports are in `research/`. Values marked `confidence: 'low'` (notably the exact actuarial-interest factor table) are estimates — use the resignation value from your own benefit statement, which overrides the formula.
 
 ## Limitations
 

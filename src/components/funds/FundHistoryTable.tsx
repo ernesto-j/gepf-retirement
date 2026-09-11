@@ -228,7 +228,7 @@ export function FundHistoryTable({
                 </div>
               </th>
               <td className={`${td} text-right ${best.fee.has(i) ? hi : ''}`}>{formatPct(row.fund.allInFee, 2)}</td>
-              <td className={`${td} text-right ${best.y10.has(i) ? hi : ''}`}>{retCell(row.fund.returns.y10)}</td>
+              <td className={`${td} text-right ${best.y10.has(i) ? hi : ''}`} title={row.fund.returnsConfidence === 'approximate' ? 'Approximate: fact sheet not verified' : undefined}>{retCell(row.fund.returns.y10)}{row.fund.returnsConfidence === 'approximate' && row.fund.returns.y10 !== null ? ' ≈' : ''}</td>
               <td className={`${td} text-right ${best.aShortfall.has(i) ? hi : ''}`}>{ageCell(row.a.incomeShortfallAge)}</td>
               <td className={`${td} text-right ${best.aRuin.has(i) ? hi : ''}`}>{ageCell(row.a.ruinAge)}</td>
               <td className={`${td} text-right ${best.aLifetime.has(i) ? hi : ''}`}>{formatRand(row.a.totals.pvNetIncome)}</td>

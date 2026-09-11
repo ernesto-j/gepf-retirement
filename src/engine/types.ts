@@ -380,6 +380,11 @@ export interface FundInfo {
   allInFee: number
   /** Annualised returns (nominal, net of TER), decimals; null if unavailable. */
   returns: { y1: number | null; y3: number | null; y5: number | null; y10: number | null; sinceInception?: number | null }
+  /**
+   * 'verified' = taken from a dated fact sheet in research/; 'approximate' = a labelled estimate used only so
+   * the fund-history comparison can run (fact sheets could not be fetched). The UI marks approximate figures with ≈.
+   */
+  returnsConfidence?: 'verified' | 'approximate'
   /** Maximum offshore exposure available in a living annuity holding this fund (1 = 100%). */
   maxOffshore: number
   /** Regulation 28 compliant (usable in a preservation fund). */

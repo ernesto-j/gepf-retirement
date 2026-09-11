@@ -150,7 +150,7 @@ export function FundTable({ funds, onUseInPlanner }: { funds: FundInfo[]; onUseI
             <td className={`${td} text-right`}>{retCell(f.returns.y1)}</td>
             <td className={`${td} text-right`}>{retCell(f.returns.y3)}</td>
             <td className={`${td} text-right`}>{retCell(f.returns.y5)}</td>
-            <td className={`${td} text-right`}>{retCell(f.returns.y10)}</td>
+            <td className={`${td} text-right`} title={f.returnsConfidence === 'approximate' ? 'Approximate: fact sheet not verified' : undefined}>{retCell(f.returns.y10)}{f.returnsConfidence === 'approximate' && f.returns.y10 !== null ? ' ≈' : ''}</td>
             <td className={`${td} text-right`}>{formatPct(f.maxOffshore, 0)}</td>
             <td className={td}>{f.reg28 ? <Badge tone="ok">Yes</Badge> : <Badge tone="neutral">No</Badge>}</td>
             <td className={td}>

@@ -75,6 +75,7 @@ const perFund = FUNDS.filter((f) => f.id !== 'gepf').map((fund) => {
     type: fund.type,
     allInFee: fund.allInFee,
     y10: fund.returns.y10,
+    y10Approximate: fund.returnsConfidence === 'approximate',
     grossHistoricReturn: fundGrossReturn(fund),
     assumption: {
       incomeShortfallAge: a.incomeShortfallAge,
@@ -170,7 +171,7 @@ if (args.includes('--per-fund')) {
       f.fundName,
       f.type,
       formatPct(f.allInFee, 2),
-      f.y10 === null ? '—' : formatPct(f.y10, 1),
+      f.y10 === null ? '—' : formatPct(f.y10, 1) + (f.y10Approximate ? '≈' : ''),
       ageCell(f.assumption.incomeShortfallAge),
       ageCell(f.assumption.ruinAge),
       formatRand(f.assumption.lifetimeNetIncomeReal),

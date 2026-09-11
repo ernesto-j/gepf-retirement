@@ -488,10 +488,25 @@ export const FUNDS: FundInfo[] = [
  * active-on-a-platform 1.6-3.0% (typical 2.30%); full-service adviser-led 3.2-4.0% (typical 3.30%).
  * Confidence: index archetype medium (anchored to the verified Satrix/Sygnia TICs); the other two
  * are low (platform and advice fee schedules are general-knowledge priors, not fetched live).
+ * Re-checked in research/funds-update-2026.md (2026-09-11) against the now-larger FUNDS list
+ * (including the new medium/low-equity and global-feeder options): the plain average allInFee
+ * per archetype came out to ~0.75% (index), ~2.28% (active) and ~3.25% (full-service) — all still
+ * comfortably inside the ranges above, so the three headline numbers are unchanged. These three
+ * archetypes describe cost tiers within the SA high/medium-equity balanced universe; the new
+ * low-equity and rand-denominated global feeder funds sit alongside them in FUNDS but are not
+ * folded into an archetype bucket (they differ by risk allocation, not just cost tier).
  */
 export const FUND_ARCHETYPES = [
-  { id: 'index', label: 'Low-cost index (10X / Sygnia / Satrix / Nedgroup Core Diversified)', allInFee: 0.009 },
-  { id: 'active', label: 'Active manager on a platform (Allan Gray / Coronation / Ninety One / PSG / M&G)', allInFee: 0.023 },
+  {
+    id: 'index',
+    label: 'Low-cost index (10X / Sygnia Skeleton / Satrix / Nedgroup Core)',
+    allInFee: 0.009,
+  },
+  {
+    id: 'active',
+    label: 'Active manager on a platform (Allan Gray / Coronation / Ninety One / PSG / M&G / Prescient / Camissa / Fairtree)',
+    allInFee: 0.023,
+  },
   { id: 'full-service', label: 'Adviser-led full service (Old Mutual / Sanlam / Discovery / Liberty)', allInFee: 0.033 },
 ] as const
 

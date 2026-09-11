@@ -8,6 +8,7 @@ import { EngineBoundary } from '../components/compare/helpers'
 import { FeeImpactChart } from '../components/funds/FeeImpactChart'
 import { FundHistoryTable } from '../components/funds/FundHistoryTable'
 import { FundTable } from '../components/funds/FundTable'
+import { LongRunGrowthChart } from '../components/funds/LongRunGrowthChart'
 import { Callout, Grid, PageHeader, Section } from '../components/ui'
 
 const JARGON: { term: string; definition: string }[] = [
@@ -35,6 +36,7 @@ export default function FundsPage() {
   )
   const illustrativeCapital = 1_000_000
   const illustrativeReturn = profile.assumptions.localBalancedReturn
+  const cpiPlus4Rate = profile.assumptions.officialCpi + 0.04
 
   function handleUseInPlanner(fund: FundInfo, returnBasis?: ScenarioDefinition['returnBasis']) {
     const exitAge = profile.person.plannedExitAge
@@ -72,6 +74,13 @@ export default function FundsPage() {
             and invest elsewhere.
           </Callout>
         )}
+      </Section>
+
+      <Section
+        title="30-year view"
+        description="A longer lens than the 1/3/5/10-year columns above: how far a fund's own long-run track record, net of its full all-in fee, could carry R1,000,000 over 30 years — next to a CPI+4% reference, a common target for a comfortable retirement drawdown."
+      >
+        <LongRunGrowthChart funds={investableFunds} cpiPlus4Rate={cpiPlus4Rate} />
       </Section>
 
       <Section

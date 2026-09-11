@@ -1,22 +1,41 @@
 import { useMemo, useState } from 'react'
 import type { FundInfo, GepfRules, Profile, ScenarioDefinition, TaxTables } from '../../engine/types'
 import { runScenario } from '../../engine/projection'
+import { fundLongRunReturn, growthOfCapital, type FundLongRunReturn } from '../../engine/funds'
 import { formatPct, formatRand } from '../../engine/money'
 import { ageTile } from '../compare/helpers'
 import { Badge, DataTable, td, th } from '../ui'
 
 type Basis = 'assumption' | 'fund-history'
 
+/**
+ * R1,000,000 grown for 30 years at the fund's longest available annualised return
+ * (`fundLongRunReturn`), grossed up by TER (long-run returns are net of TER only, like
+ * `returns.y1/y3/...`) then reduced by the fund's full all-in fee (TIC + platform + advice) —
+ * the same TER-gross-up-then-all-in-fee-deduct convention `fundGrossReturn` uses for the
+ * planner's 'fund-history' return basis. `value` is null when the fund has no long-run figure
+ * on record (`longRun.rate === null`) — shown as "—", not a guessed number.
+ */
+function r1mAfter30(fund: FundInfo): { value: number | null; longRun: FundLongRunReturn } {
+  const longRun = fundLongRunReturn(fund)
+  if (longRun.rate === null) return { value: null, longRun }
+  const grossReturn = longRun.rate + fund.ter
+  return { value: growthOfCapital(grossReturn, fund.allInFee, 30), longRun }
+}
+
 interface FundRunRow {
   fund: FundInfo
   a: ReturnType<typeof runScenario>
   b: ReturnType<typeof runScenario>
+  r1m30: number | null
+  longRun: FundLongRunReturn
 }
 
 type SortKey =
   | 'name'
   | 'allInFee'
   | 'y10'
+  | 'r1m30'
   | 'aShortfall'
   | 'aRuin'
   | 'aLifetime'
@@ -50,6 +69,8 @@ function sortValue(row: FundRunRow, key: SortKey): number | string {
       return row.fund.allInFee
     case 'y10':
       return row.fund.returns.y10 ?? -Infinity
+    case 'r1m30':
+      return row.r1m30 ?? -Infinity
     case 'aShortfall':
       return row.a.incomeShortfallAge ?? Infinity
     case 'aRuin':
@@ -153,7 +174,8 @@ export function FundHistoryTable({
         const shared: Partial<ScenarioDefinition> = { fundId: fund.id, offshorePct: Math.min(baseDefinition.offshorePct, fund.maxOffshore) }
         const defA: ScenarioDefinition = { ...baseDefinition, ...shared, id: `perfund-a-${fund.id}`, returnBasis: 'assumption' }
         const defB: ScenarioDefinition = { ...baseDefinition, ...shared, id: `perfund-b-${fund.id}`, returnBasis: 'fund-history' }
-        return { fund, a: runScenario(profile, defA, deps), b: runScenario(profile, defB, deps) }
+        const { value: r1m30, longRun } = r1mAfter30(fund)
+        return { fund, a: runScenario(profile, defA, deps), b: runScenario(profile, defB, deps), r1m30, longRun }
       })
   }, [profile, funds, tables, rules, baseDefinition])
 
@@ -176,6 +198,7 @@ export function FundHistoryTable({
   const best = {
     fee: bestSet(sorted.map((r) => r.fund.allInFee), { higherIsBetter: false }),
     y10: bestSet(sorted.map((r) => r.fund.returns.y10), { higherIsBetter: true }),
+    r1m30: bestSet(sorted.map((r) => r.r1m30), { higherIsBetter: true }),
     aShortfall: bestSet(sorted.map((r) => r.a.incomeShortfallAge), { higherIsBetter: true, nullIsBest: true }),
     aRuin: bestSet(sorted.map((r) => r.a.ruinAge), { higherIsBetter: true, nullIsBest: true }),
     aLifetime: bestSet(sorted.map((r) => r.a.totals.pvNetIncome), { higherIsBetter: true }),
@@ -205,6 +228,13 @@ export function FundHistoryTable({
             <HeaderCell label="Fund" sortKey="name" sort={sort} onSort={onSort} align="left" />
             <HeaderCell label="All-in fee" sortKey="allInFee" sort={sort} onSort={onSort} help="TIC + platform + advice" />
             <HeaderCell label="10yr return" sortKey="y10" sort={sort} onSort={onSort} help="Fund's own annualised 10-year return, net of TER" />
+            <HeaderCell
+              label="R1m after 30 yrs"
+              sortKey="r1m30"
+              sort={sort}
+              onSort={onSort}
+              help="R1,000,000 grown for 30 years at the fund's longest available annualised return, grossed up by TER then reduced by the full all-in fee — illustrative, not a forecast. Hover a value for the return used."
+            />
             <HeaderCell label="(a) Shortfall from" sortKey="aShortfall" sort={sort} onSort={onSort} help="Age income first falls below target, global assumption" />
             <HeaderCell label="(a) Runs out at" sortKey="aRuin" sort={sort} onSort={onSort} help="Age capital is exhausted, global assumption" />
             <HeaderCell label="(a) Lifetime income" sortKey="aLifetime" sort={sort} onSort={onSort} help="Lifetime net income, today's rand, global assumption" />
@@ -229,6 +259,16 @@ export function FundHistoryTable({
               </th>
               <td className={`${td} text-right ${best.fee.has(i) ? hi : ''}`}>{formatPct(row.fund.allInFee, 2)}</td>
               <td className={`${td} text-right ${best.y10.has(i) ? hi : ''}`} title={row.fund.returnsConfidence === 'approximate' ? 'Approximate: fact sheet not verified' : undefined}>{retCell(row.fund.returns.y10)}{row.fund.returnsConfidence === 'approximate' && row.fund.returns.y10 !== null ? ' ≈' : ''}</td>
+              <td
+                className={`${td} text-right ${best.r1m30.has(i) ? hi : ''}`}
+                title={
+                  row.r1m30 === null
+                    ? 'No long-run return figure on record for this fund'
+                    : `Based on the fund's ${row.longRun.label} return (${formatPct(row.longRun.rate, 1)}${row.fund.returnsConfidence === 'approximate' ? ' ≈' : ''}), grossed up by its ${formatPct(row.fund.ter, 2)} TER, then compounded for 30 years net of its ${formatPct(row.fund.allInFee, 2)} all-in fee.`
+                }
+              >
+                {row.r1m30 === null ? '—' : formatRand(row.r1m30)}
+              </td>
               <td className={`${td} text-right ${best.aShortfall.has(i) ? hi : ''}`}>{ageCell(row.a.incomeShortfallAge)}</td>
               <td className={`${td} text-right ${best.aRuin.has(i) ? hi : ''}`}>{ageCell(row.a.ruinAge)}</td>
               <td className={`${td} text-right ${best.aLifetime.has(i) ? hi : ''}`}>{formatRand(row.a.totals.pvNetIncome)}</td>

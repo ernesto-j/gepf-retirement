@@ -44,10 +44,35 @@
  *    `calcIncomeTax` at the member's age that year, then apportioned pro rata to the row's
  *    columns. Discretionary withdrawals and the medical subsidy are not taxed.
  * 6. Capital roll-forward, exactly (this identity is asserted in the tests):
- *      capitalEnd = capitalStart - draws + investmentReturn - fees
+ *      capitalEnd = capitalStart - draws + investmentReturn - fees + customCashFlows
  *    `investmentReturn` is net of the discretionary return tax and INCLUDES the currency
  *    translation gain on the offshore sleeve; `fees` includes the FX conversion cost paid
- *    when rand is converted offshore.
+ *    when rand is converted offshore. `customCashFlows` is 0 in every year in which no custom
+ *    investment is bought, so with `profile.investments` empty the identity is exactly the
+ *    one it has always been: `capitalEnd = capitalStart - draws + investmentReturn - fees`.
+ *
+ * 7. Custom investments (`profile.investments`, projected in src/engine/investments.ts) are
+ *    part of the same capital. Their rand EQUITY (value less the loan) is inside
+ *    `capitalStart`, `capitalEnd`, `capitalEndReal`, the sleeve columns (a rand holding sits in
+ *    `capitalLocal`, a foreign one in `capitalOffshoreZar` / `capitalOffshoreUsd`) and therefore
+ *    in `legacyAtHorizon` and `ruinAge`. Each year:
+ *      - the purchase year takes `deposit + entry costs` (in rand at that year's rate) out of
+ *        the discretionary pots when `fundedFrom === 'exit-capital'` — pro rata, with a note,
+ *        if the pots cannot cover every purchase falling in the same year — and books the
+ *        difference between the equity gained and the cash paid as `customCashFlows`;
+ *      - net cash of `incomeUse: 'spend'` is ALREADY after the investment's own tax, is added
+ *        to `totalNetIncome` as `customIncomeNet`, is never taxed again, and reduces the draw
+ *        the living annuity has to make;
+ *      - net cash of `incomeUse: 'reinvest'` is paid into the discretionary pot instead;
+ *      - a NEGATIVE year (a geared property whose rent does not cover interest, costs and
+ *        capital repayments) is funded out of the discretionary pots and reported as
+ *        `customCashIn`, together with the purchase cash;
+ *      - the sale, at the end of the holding period or of the horizon, pays its net proceeds
+ *        into the discretionary pot's sleeve that matches the currency (ZAR into the local
+ *        sleeve, anything else into the offshore sleeve at that year's USD/ZAR rate).
+ *    `investmentReturn` therefore also carries what the investments did to capital: the growth
+ *    of the asset, the loan amortisation, the entry and selling costs, the currency move and
+ *    the gain or loss realised at the sale.
  *
  * ---------------------------------------------------------------------------
  * Simplifications (all deliberate; the material ones are also pushed to `result.notes`)
@@ -78,7 +103,12 @@
  * 10. When money is retired out of a preservation fund the lump-sum tax leaves the system in
  *     that year: `capitalStart` for that year is measured AFTER the event, so the capital
  *     line steps down by the tax paid.
- * 11. DPSA ERP / VEP (Circular 38 of 2025): the once-off incentive is a SECOND lump-sum event at
+ * 11. Custom investments settle once a year: the purchase, a negative year and reinvested cash
+ *     move at the START of a year alongside the draw, the sale at the END of one (so the
+ *     proceeds earn no return in the year they arrive). The income they pay is taxed inside
+ *     `investments.ts` at the holding's own flat rate and never enters the member's SA taxable
+ *     income here, so it neither pushes the pension into a higher bracket nor earns a rebate.
+ * 12. DPSA ERP / VEP (Circular 38 of 2025): the once-off incentive is a SECOND lump-sum event at
  *     exit on the retirement routes only, taxed on the retirement lump-sum table aggregated
  *     immediately after the gratuity (the "severance benefit" treatment that applies to an
  *     employer termination lump sum from age 55) and invested alongside the net gratuity. The
@@ -90,6 +120,8 @@ import type {
   Assumptions,
   ComparisonMetric,
   ComparisonResult,
+  CustomInvestment,
+  CustomInvestmentYear,
   FundInfo,
   GepfRules,
   Profile,
@@ -103,6 +135,7 @@ import type {
 import { DEFAULT_FUND_ID, FUNDS } from '../data/funds'
 import { fundGrossReturn } from './funds'
 import { gepfBenefitsAtExit, getGepfRules } from './gepf'
+import { projectCustomInvestment, summariseInvestment } from './investments'
 import { clamp } from './money'
 import { prosCons, riskFlags } from './insights'
 import { calcIncomeTax, calcRetirementLumpSumTax, calcSavingsPotWithdrawalTax, calcWithdrawalLumpSumTax, getTaxTables, grossForNet } from './tax'
@@ -632,6 +665,8 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   const incomeTaxByYear: number[] = []
   let lifetimeIncomeTax = 0
   let lifetimeReturnTax = 0
+  /** Income tax and CGT paid INSIDE the custom investments (already netted off their cash flows). */
+  let customInvestmentTax = 0
   let commutationTax = 0
   let lifetimeFees = fxCostAtExit
   let ruinAge: number | null = null
@@ -645,6 +680,69 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   let capitalEverPositive = false
   let incomeShortfallAge: number | null = null
   const horizonYears = Math.round(planToAge - exitAge)
+
+  // --- Custom investments -------------------------------------------------
+  /** One enabled holding, projected once up front and then read year by year. */
+  interface CustomRun {
+    inv: CustomInvestment
+    rows: CustomInvestmentYear[]
+    /** Keyed by the year index i, so a fractional exit age still lines up with the row loop. */
+    byYear: Map<number, CustomInvestmentYear>
+  }
+  const customRuns: CustomRun[] = []
+  for (const inv of Array.isArray(profile.investments) ? profile.investments : []) {
+    if (!inv || inv.enabled === false) continue
+    const invRows = projectCustomInvestment(inv, a, { currentAge, fromAge: exitAge, toAge: planToAge })
+    if (invRows.length === 0) continue
+    const byYear = new Map<number, CustomInvestmentYear>()
+    for (const r of invRows) byYear.set(Math.round(r.age - exitAge), r)
+    customRuns.push({ inv, rows: invRows, byYear })
+  }
+  /** Custom equity in rand carried out of the previous year (already at this year's rate). */
+  let carriedCustomEquityZar = 0
+  let unfundedCustomCarry = 0
+
+  const discretionaryValue = (usdZar: number): number =>
+    pots.reduce((s, p) => s + (p.kind === 'discretionary' ? potValue(p, usdZar) : 0), 0)
+
+  /** Takes `amount` from the discretionary pots in order and returns what was actually taken. */
+  const takeFromDiscretionary = (amount: number, usdZar: number): number => {
+    let outstanding = nonNeg(amount)
+    let taken = 0
+    for (const pot of pots) {
+      if (outstanding <= CENT) break
+      if (pot.kind !== 'discretionary') continue
+      const got = withdraw(pot, outstanding, usdZar)
+      taken += got
+      outstanding -= got
+    }
+    return taken
+  }
+
+  /** The pot that receives investment income and sale proceeds, created on demand. */
+  const discretionaryTarget = (): Pot => {
+    const existing = pots.find((p) => p.kind === 'discretionary')
+    if (existing) return existing
+    const created: Pot = {
+      name: 'Investment proceeds',
+      kind: 'discretionary',
+      local: 0,
+      offshoreUsd: 0,
+      fee,
+      targetOffshoreShare: fraction(def.offshorePct),
+      taxedReturns: true,
+    }
+    pots.push(created)
+    return created
+  }
+
+  /** Pays rand into the sleeve that matches the holding's currency (ZAR local, anything else offshore). */
+  const payIntoSleeve = (amountZar: number, currency: CustomInvestment['currency'], usdZar: number): void => {
+    if (!(amountZar > 0)) return
+    const target = discretionaryTarget()
+    if (currency === 'ZAR' || !(usdZar > 0)) target.local += amountZar
+    else target.offshoreUsd += amountZar / usdZar
+  }
 
   for (let i = 0; i <= horizonYears; i++) {
     const age = exitAge + i
@@ -715,8 +813,69 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
       }
     }
 
-    const capitalStart = totalValue(pots, usdZar)
+    // Capital is the pots PLUS the rand equity of the custom investments carried into the year.
+    const capitalStart = totalValue(pots, usdZar) + carriedCustomEquityZar
     if (capitalStart > CENT) capitalEverPositive = true
+
+    // --- Custom investments: purchases, income, negative carry ---------------
+    const customThisYear = customRuns
+      .map((run) => ({ run, cr: run.byYear.get(i) }))
+      .filter((x): x is { run: CustomRun; cr: CustomInvestmentYear } => x.cr !== undefined)
+
+    let customCashIn = 0
+    let customCashFlows = 0
+    // Holdings entering the plan this year: a purchase, or one already owned showing up at exit.
+    const entering = customThisYear.filter((x) => x.cr === x.run.rows[0])
+    if (entering.length > 0) {
+      const wantsPotCash = entering.filter((x) => x.run.inv.fundedFrom === 'exit-capital' && x.cr.purchaseCashZar !== undefined)
+      const required = wantsPotCash.reduce((s, x) => s + nonNeg(x.cr.purchaseCashZar), 0)
+      let funded = 1
+      if (required > CENT) {
+        const available = discretionaryValue(usdZar)
+        if (available < required - CENT) {
+          funded = available > 0 ? available / required : 0
+          notes.push(
+            `At age ${Math.round(age)} your discretionary savings hold ${formatNote(available)} but ${formatNote(
+              required,
+            )} is needed to buy ${wantsPotCash.map((x) => x.run.inv.name).join(', ')}. Only ${(funded * 100).toFixed(
+              0,
+            )}% of the purchase cash is taken from the plan (pro rata across the purchases falling in that year); the rest is assumed to come from money outside this plan.`,
+          )
+        }
+        const taken = takeFromDiscretionary(required * funded, usdZar)
+        customCashIn += taken
+        customCashFlows -= taken
+      }
+      // The equity that appears (deposit, or the value less the loan for a holding you already
+      // own) enters the capital; netting the cash the pots paid leaves only the entry costs to
+      // show up as a negative investment return.
+      for (const x of entering) customCashFlows += num(x.cr.openingEquityZar)
+    }
+
+    let customIncomeNet = 0
+    let customReinvest = 0
+    let customNegativeCarry = 0
+    for (const { run, cr } of customThisYear) {
+      customInvestmentTax += nonNeg(cr.taxCcy) * num(cr.fx, 1) + nonNeg(cr.cgtCcy) * num(cr.fx, 1)
+      const net = num(cr.netCashZar)
+      if (net >= 0) {
+        if (run.inv.incomeUse === 'reinvest') customReinvest += net
+        else customIncomeNet += net
+      } else {
+        customNegativeCarry += -net
+      }
+    }
+    if (customNegativeCarry > CENT) {
+      const taken = takeFromDiscretionary(customNegativeCarry, usdZar)
+      customCashIn += taken
+      unfundedCustomCarry += Math.max(0, customNegativeCarry - taken)
+    }
+    if (customReinvest > CENT) {
+      for (const { run, cr } of customThisYear) {
+        const net = num(cr.netCashZar)
+        if (run.inv.incomeUse === 'reinvest' && net > 0) payIntoSleeve(net, run.inv.currency, usdZar)
+      }
+    }
 
     // --- Income sources -----------------------------------------------------
     const gepfPensionGross = pensionYear0 * (1 + a.officialCpi * a.gepfIncreaseAsPctOfCpi) ** i
@@ -727,7 +886,9 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     const taxOpts = { medicalMembers: setup.medicalMembers }
     const netOfTax = (taxable: number): number => taxable - calcIncomeTax(taxable, age, tables, taxOpts).tax
     const baseTaxable = gepfPensionGross + otherIncomeGross
-    let needed = Math.max(0, targetNetIncome - (netOfTax(baseTaxable) + medicalSubsidy))
+    // `customIncomeNet` is already net of the investment's own tax, so it is never added to
+    // `baseTaxable`: it simply reduces what the living annuity has to pay out.
+    let needed = Math.max(0, targetNetIncome - (netOfTax(baseTaxable) + medicalSubsidy + customIncomeNet))
 
     // --- Draws: living annuity first (clamped), then discretionary pots ------
     let laDraw = 0
@@ -744,7 +905,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
       const maxDraw = laCapital * a.livingAnnuityMaxDrawdown
       laDraw = Math.min(clamp(wanted, minDraw, maxDraw), laCapital)
       laDraw = withdraw(la, laDraw, usdZar)
-      needed = Math.max(0, targetNetIncome - (netOfTax(baseTaxable + laDraw) + medicalSubsidy))
+      needed = Math.max(0, targetNetIncome - (netOfTax(baseTaxable + laDraw) + medicalSubsidy + customIncomeNet))
     }
 
     let discretionaryDraw = 0
@@ -765,7 +926,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     const gepfPensionTax = taxable > 0 ? (totalTax * gepfPensionGross) / taxable : 0
     const laTax = taxable > 0 ? (totalTax * laDraw) / taxable : 0
     const drawGross = laDraw + discretionaryDraw
-    const totalNetIncome = taxable - totalTax + medicalSubsidy + discretionaryDraw
+    const totalNetIncome = taxable - totalTax + medicalSubsidy + discretionaryDraw + customIncomeNet
     const shortfall = Math.max(0, targetNetIncome - totalNetIncome)
     lifetimeIncomeTax += totalTax
     incomeTaxByYear.push(totalTax)
@@ -789,18 +950,42 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     lifetimeFees += feesThisYear
     lifetimeReturnTax += returnTaxThisYear
 
-    const capitalLocal = pots.reduce((s, p) => s + p.local, 0)
-    const capitalOffshoreUsd = pots.reduce((s, p) => s + p.offshoreUsd, 0)
+    // --- Custom investments: sales settle at the END of the year -------------
+    // Proceeds arrive after the pots have grown, so they earn nothing in the year of the sale.
+    let customEquityLocalZar = 0
+    let customEquityOffshoreZar = 0
+    for (const { run, cr } of customThisYear) {
+      const proceeds = num(cr.saleProceedsZar)
+      if (cr.saleProceedsZar !== undefined && proceeds !== 0) {
+        if (proceeds > 0) payIntoSleeve(proceeds, run.inv.currency, usdZarNext)
+        else customCashIn += takeFromDiscretionary(-proceeds, usdZarNext)
+      }
+      const equity = num(cr.equityZar)
+      if (run.inv.currency === 'ZAR') customEquityLocalZar += equity
+      else customEquityOffshoreZar += equity
+    }
+    const customEquityZar = customEquityLocalZar + customEquityOffshoreZar
+
+    // A rand holding sits in the local sleeve and a foreign one in the offshore sleeve, so
+    // `capitalEnd = capitalLocal + capitalOffshoreZar` and
+    // `capitalOffshoreZar = capitalOffshoreUsd x usdZar(t+1)` both stay exactly true.
+    const capitalLocal = pots.reduce((s, p) => s + p.local, 0) + customEquityLocalZar
+    const capitalOffshoreUsd =
+      pots.reduce((s, p) => s + p.offshoreUsd, 0) + (usdZarNext > 0 ? customEquityOffshoreZar / usdZarNext : 0)
     const capitalOffshoreZar = capitalOffshoreUsd * usdZarNext
     const capitalEnd = capitalLocal + capitalOffshoreZar
-    // Residual so that capitalStart - draws + investmentReturn - fees === capitalEnd exactly.
-    // It is net of the discretionary return tax and includes the currency translation gain.
-    const investmentReturn = capitalEnd - (capitalStart - drawGross) + feesThisYear
+    // Residual so that capitalStart - draws + investmentReturn - fees + customCashFlows ===
+    // capitalEnd exactly. It is net of the discretionary return tax and includes the currency
+    // translation gain, the growth and loan amortisation of the custom investments, their entry
+    // and selling costs, and the gain or loss realised when one of them is sold.
+    const investmentReturn = capitalEnd - (capitalStart - drawGross) + feesThisYear - customCashFlows
+    carriedCustomEquityZar = customEquityZar
 
     const row: YearRow = {
-      customIncomeNet: 0,
-      customEquityZar: 0,
-      customCashIn: 0,
+      customIncomeNet: finite(customIncomeNet),
+      customEquityZar: finite(customEquityZar),
+      customCashIn: finite(customCashIn),
+      customCashFlows: finite(customCashFlows),
       year: i,
       age,
       cpiIndex: finite(cpiIndex),
@@ -877,7 +1062,9 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     },
     atRetirementFromPreservation,
     firstYear: {
-      grossMonthlyIncome: finite(((first?.gepfPensionGross ?? 0) + (first?.drawGross ?? 0) + (first?.otherIncomeGross ?? 0) + (first?.medicalSubsidy ?? 0)) / 12),
+      grossMonthlyIncome: finite(
+        ((first?.gepfPensionGross ?? 0) + (first?.drawGross ?? 0) + (first?.otherIncomeGross ?? 0) + (first?.medicalSubsidy ?? 0) + (first?.customIncomeNet ?? 0)) / 12,
+      ),
       monthlyTax: finite((incomeTaxByYear[0] ?? 0) / 12),
       netMonthlyIncome: finite((first?.totalNetIncome ?? 0) / 12),
       targetNetMonthlyIncome: finite((first?.targetNetIncome ?? 0) / 12),
@@ -891,7 +1078,9 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     totals: {
       lifetimeNetIncomeNominal: finite(lifetimeNetIncomeNominal),
       lifetimeNetIncomeReal: finite(pvNetIncome),
-      lifetimeTaxPaid: finite(lifetimeIncomeTax + lifetimeReturnTax + commutationTax + lumpSumTax + incentiveTax + lumpSumTaxAtRetirement),
+      lifetimeTaxPaid: finite(
+        lifetimeIncomeTax + lifetimeReturnTax + customInvestmentTax + commutationTax + lumpSumTax + incentiveTax + lumpSumTaxAtRetirement,
+      ),
       lifetimeFeesPaid: finite(lifetimeFees),
       pvNetIncome: finite(pvNetIncome),
       legacyAtHorizon: finite(last?.capitalEnd ?? 0),
@@ -902,6 +1091,67 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     cons: [],
     flags: [],
     notes,
+  }
+
+  // --- Custom investments: summary, notes and the leverage flag -------------
+  if (customRuns.length > 0) {
+    result.customInvestments = customRuns.map(({ inv, rows: invRows }) => {
+      const s = summariseInvestment(invRows)
+      return {
+        id: inv.id,
+        name: inv.name,
+        startAge: finite(s.startAge),
+        endAge: finite(s.endAge),
+        purchaseCashZar: finite(s.purchaseCashZar),
+        totalNetIncomeZar: finite(s.totalNetIncomeZar),
+        saleProceedsZar: finite(s.saleProceedsZar),
+        peakEquityZar: finite(s.peakEquityZar),
+      }
+    })
+    for (const { inv, rows: invRows } of customRuns) {
+      const s = summariseInvestment(invRows)
+      const price = nonNeg(inv.deposit) + nonNeg(inv.loan?.amount)
+      const sold = invRows[invRows.length - 1]?.event === 'sell'
+      notes.push(
+        `${inv.name}: ${inv.currency} ${formatAmount(price)} ${
+          s.purchaseCashZar > CENT ? `bought at ${Math.round(s.startAge)}` : `held from ${Math.round(s.startAge)}`
+        }, ${sold ? `sold at ${Math.round(s.endAge)}` : `still held at ${Math.round(s.endAge)}`}: ${
+          s.purchaseCashZar > CENT ? `${formatNote(s.purchaseCashZar)} cash in, ` : ''
+        }net income ${formatNote(s.totalNetIncomeZar)}, proceeds ${formatNote(s.saleProceedsZar)}${
+          inv.incomeUse === 'reinvest' ? ' (income reinvested, not spent)' : ''
+        }.`,
+      )
+    }
+    if (unfundedCustomCarry > CENT) {
+      notes.push(
+        `${formatNote(unfundedCustomCarry)} of the cash your investments needed over the projection could not be funded from discretionary savings, so it is assumed to have been borrowed or found elsewhere.`,
+      )
+    }
+    const geared = customRuns.filter(({ inv }) => nonNeg(inv.loan?.amount) > 0)
+    if (geared.length > 0) {
+      const totalLoanZar = geared.reduce(
+        (sum, { inv, rows: invRows }) => sum + nonNeg(inv.loan?.amount) * num(invRows[0]?.fx, 1),
+        0,
+      )
+      extraFlags.push({
+        id: 'custom-investment',
+        severity: 'info',
+        title: `${geared.map((g) => g.inv.name).join(', ')}: ${formatNote(totalLoanZar)} of debt amplifies the outcome both ways`,
+        detail: `A loan magnifies the return on your own money in both directions. On ${geared[0].inv.name} the projection assumes the value rises every year at ${(
+          safeRate(geared[0].inv.growth, 0) * 100
+        ).toFixed(
+          1,
+        )}% with no vacancy beyond the cost allowance and no rate rise; if the value instead falls, the loss falls entirely on your deposit, and the interest and capital repayments carry on regardless. Foreign property also carries non-resident tax: Australia taxes a foreign resident's rent from the first dollar (no tax-free threshold) and gives no 50% CGT discount, with foreign-resident capital-gains withholding on the sale — the ${(
+          clamp(num(geared[0].inv.incomeTaxRate, 0), 0, 1) * 100
+        ).toFixed(1)}% income and ${(clamp(num(geared[0].inv.cgtRate, 0), 0, 1) * 100).toFixed(
+          1,
+        )}% CGT rates used here are effective-rate estimates, not a ruling. Confirm the SA double-tax agreement treatment, exchange-control allowances and the lender's terms for a non-resident borrower before committing.`,
+        appliesTo: [],
+      })
+    }
+    notes.push(
+      "Your own investments are modelled in their own currency and converted at the scenario's rand path; their income is taxed at the flat rate you set for each holding and is NOT added to your South African taxable income, so it neither pushes your pension into a higher bracket nor uses up a rebate.",
+    )
   }
 
   notes.push(
@@ -933,6 +1183,14 @@ function pvOfSubsidy(
     pv += (annualToday * (1 + medicalInflation) ** t) / (1 + personalInflation) ** t
   }
   return pv
+}
+
+/** Compact currency-agnostic amount for notes ("100k", "1.50m"), used with a currency code. */
+function formatAmount(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}m`
+  if (abs >= 1_000) return `${Math.round(value / 1_000)}k`
+  return `${Math.round(value)}`
 }
 
 /** Compact rand for notes (the UI formats properly; notes are plain strings). */

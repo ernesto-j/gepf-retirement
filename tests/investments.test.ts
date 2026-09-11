@@ -184,7 +184,8 @@ describe('fixed-term deposit: R1,000,000 at 9.5% for 5 years, taxed at 36%', () 
   it('returns the R1,000,000 capital at the end of year 5, with no gain and so no CGT', () => {
     expect(rows[4].saleProceedsZar).toBeCloseTo(1_000_000, 6)
     expect(rows[4].cgtCcy).toBeCloseTo(0, 9)
-    expect(rows[4].equityZar).toBe(0)
+    // The sale row still reports the equity it held just before maturing.
+    expect(rows[4].equityZar).toBeCloseTo(1_000_000, 6)
     for (const row of rows.slice(0, 4)) {
       expect(row.saleProceedsZar).toBeUndefined()
       expect(row.equityZar, `age${row.age}`).toBeCloseTo(1_000_000, 6)
@@ -239,13 +240,12 @@ describe('S&P 500 ETF: USD 100k with the rand weakening 4% a year', () => {
 
   it('rand equity compounds at (1 + growth)(1 + depreciation) = 1.06 x 1.04', () => {
     rows.forEach((row, k) => {
-      if (row.event === 'sell') return
       // value at the end of year k has grown k+1 times; it is translated at the end-of-year rate.
       expect(row.valueCcy, `value age${row.age}`).toBeCloseTo(100_000 * 1.06 ** (k + 1), 6)
       expect(row.loanBalanceCcy).toBe(0)
       expect(row.equityZar, `equity age${row.age}`).toBeCloseTo(100_000 * 1.06 ** (k + 1) * 16.2 * 1.04 ** (6 + k), 4)
     })
-    for (let k = 1; k < rows.length - 1; k++) {
+    for (let k = 1; k < rows.length; k++) {
       expect(rows[k].equityZar / rows[k - 1].equityZar, `ratio ${k}`).toBeCloseTo(1.06 * 1.04, 9)
     }
   })
@@ -268,7 +268,8 @@ describe('S&P 500 ETF: USD 100k with the rand weakening 4% a year', () => {
     expect(sale.valueCcy).toBeCloseTo(salePrice, 6)
     expect(sale.cgtCcy).toBeCloseTo(gain * 0.18, 6)
     expect(sale.saleProceedsZar).toBeCloseTo(proceeds * 16.2 * 1.04 ** 20, 2)
-    expect(sale.equityZar).toBe(0)
+    // Pre-sale equity, which the proceeds then net down by the selling cost and the CGT.
+    expect(sale.equityZar).toBeCloseTo(salePrice * 16.2 * 1.04 ** 20, 2)
   })
 })
 
@@ -312,9 +313,7 @@ describe('Australian house: A$500,000 with a 60% loan at 6.5% over 25 years', ()
       expect(row.valueCcy, `value ${k}`).toBeCloseTo(500_000 * 1.045 ** (k + 1), 6)
       expect(row.loanBalanceCcy, `loan ${k}`).toBeCloseTo(balanceAfter(300_000, 0.065, 25, k + 1), 6)
       expect(row.interestCcy, `interest ${k}`).toBeCloseTo(balanceAfter(300_000, 0.065, 25, k) * 0.065, 6)
-      if (row.event !== 'sell') {
-        expect(row.equityZar, `equity ${k}`).toBeCloseTo((row.valueCcy - row.loanBalanceCcy) * 10.8, 4)
-      }
+      expect(row.equityZar, `equity ${k}`).toBeCloseTo((row.valueCcy - row.loanBalanceCcy) * 10.8, 4)
       // The balance falls by exactly the principal booked in the row.
       const previous = k === 0 ? 300_000 : rows[k - 1].loanBalanceCcy
       expect(row.loanBalanceCcy, `step ${k}`).toBeCloseTo(previous - row.principalCcy, 6)
@@ -332,7 +331,7 @@ describe('Australian house: A$500,000 with a 60% loan at 6.5% over 25 years', ()
     expect(gain).toBeGreaterThan(0)
     expect(sale.cgtCcy).toBeCloseTo(cgt, 6)
     expect(sale.saleProceedsZar).toBeCloseTo(proceeds * 10.8, 3)
-    expect(sale.equityZar).toBe(0)
+    expect(sale.equityZar).toBeCloseTo((salePrice - balance) * 10.8, 3)
     const s = summariseInvestment(rows)
     expect(s.saleProceedsZar).toBeCloseTo(proceeds * 10.8, 3)
     // Every year is cash-negative while the loan amortises, so the running total is negative.
@@ -627,6 +626,33 @@ describe('runScenario: buying an investment out of exit capital', () => {
       expect(row.capitalEnd, `age${row.age}`).toBeCloseTo(b.capitalEnd, 6)
       expect(row.totalNetIncome, `income age${row.age}`).toBeCloseTo(b.totalNetIncome, 6)
     }
+  })
+
+  it('pays foreign sale proceeds into the offshore sleeve of the discretionary pot', () => {
+    const spot = DEFAULT_PROFILE.assumptions.usdZarSpot // randDepreciation is 0 under FLAT
+    const usd = investmentOf({
+      id: 'usd',
+      name: 'Dollar holding',
+      currency: 'USD',
+      startAge: 60,
+      termYears: 3,
+      deposit: 10_000,
+      fundedFrom: 'external',
+      incomeUse: 'reinvest',
+    })
+    const r = runScenario(flatProfile([usd]), FLAT_DEF, DEPS)
+    // While it is held, a dollar holding IS offshore exposure: the scenario's own pots are 0%
+    // offshore, so the whole offshore sleeve is the holding's equity.
+    expect(r.rows[1].customEquityZar).toBeCloseTo(10_000 * spot, 6)
+    expect(r.rows[1].capitalOffshoreZar).toBeCloseTo(10_000 * spot, 4)
+    expect(r.rows[1].capitalOffshoreUsd).toBeCloseTo(10_000, 6)
+    // On maturity the proceeds land in the pot's offshore sleeve at that year's rate.
+    expect(r.rows[2].customEquityZar).toBeCloseTo(0, 6)
+    expect(r.rows[2].capitalOffshoreUsd).toBeCloseTo(10_000, 6)
+    expect(r.rows[2].capitalOffshoreZar).toBeCloseTo(10_000 * spot, 4)
+    // The scenario targets 0% offshore, so the next rebalance brings the money home.
+    expect(r.rows[3].capitalOffshoreZar).toBeCloseTo(0, 6)
+    expect(r.rows[3].capitalLocal).toBeCloseTo(r.rows[3].capitalEnd, 6)
   })
 
   it('says so when the discretionary pot cannot cover the purchase, and funds it pro rata', () => {

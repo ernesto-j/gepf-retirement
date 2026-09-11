@@ -428,7 +428,10 @@ export interface CustomInvestmentYear {
   /** Income - costs - interest - principal - tax (can be negative = cash the member must put in). */
   netCashCcy: number
   netCashZar: number
-  /** Value - loan balance, in rand, at the END of the year (0 in the sale year: it has become `saleProceedsZar`). */
+  /**
+   * Value - loan balance, in rand, at the END of the year. In the sale year this is the equity
+   * immediately BEFORE the sale: count `saleProceedsZar` there instead, never both.
+   */
   equityZar: number
   /** Net proceeds in rand when sold this year (after selling costs, loan settlement and CGT). */
   saleProceedsZar?: number

@@ -960,7 +960,9 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
         if (proceeds > 0) payIntoSleeve(proceeds, run.inv.currency, usdZarNext)
         else customCashIn += takeFromDiscretionary(-proceeds, usdZarNext)
       }
-      const equity = num(cr.equityZar)
+      // A holding sold this year is already counted as proceeds inside the pot, so its
+      // (pre-sale) `equityZar` must not be added on top.
+      const equity = cr.saleProceedsZar !== undefined ? 0 : num(cr.equityZar)
       if (run.inv.currency === 'ZAR') customEquityLocalZar += equity
       else customEquityOffshoreZar += equity
     }
@@ -1196,9 +1198,11 @@ function formatAmount(value: number): string {
 /** Compact rand for notes (the UI formats properly; notes are plain strings). */
 function formatNote(value: number): string {
   const abs = Math.abs(value)
-  if (abs >= 1_000_000) return `R${(value / 1_000_000).toFixed(2)}m`
-  if (abs >= 1_000) return `R${Math.round(value / 1_000)}k`
-  return `R${Math.round(value)}`
+  // The sign goes in front of the R, not between it and the digits ("-R1.78m", not "R-1.78m").
+  const sign = value < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}R${(abs / 1_000_000).toFixed(2)}m`
+  if (abs >= 1_000) return `${sign}R${Math.round(abs / 1_000)}k`
+  return `${sign}R${Math.round(abs)}`
 }
 
 // ---------------------------------------------------------------------------

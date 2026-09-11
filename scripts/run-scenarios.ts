@@ -141,6 +141,28 @@ table(
   ]),
 )
 
+if (profile.investments.length > 0) {
+  console.log('\nYOUR OWN INVESTMENTS (per route; net income and proceeds in rand of the day)')
+  const ageOf = (v: number) => (Number.isFinite(v) ? String(Math.round(v)) : '—')
+  table(
+    ['Route', 'Investment', 'Bought', 'Sold', 'Cash in', 'Net income', 'Proceeds', 'Peak equity'],
+    results.flatMap((r) =>
+      (r.customInvestments ?? []).map((ci) => [
+        r.definition.name,
+        ci.name,
+        ageOf(ci.startAge),
+        ageOf(ci.endAge),
+        formatRand(ci.purchaseCashZar),
+        formatRand(ci.totalNetIncomeZar),
+        formatRand(ci.saleProceedsZar),
+        formatRand(ci.peakEquityZar),
+      ]),
+    ),
+  )
+  const enabled = profile.investments.filter((i) => i.enabled !== false).length
+  if (enabled === 0) console.log('  (no enabled investments)')
+}
+
 console.log('\nNET INCOME PER YEAR (nominal) AND CAPITAL AT END OF YEAR, by age')
 const ages = [65, 70, 75, 80, 85, 90].filter((a) => a >= profile.person.plannedExitAge && a <= profile.person.planToAge)
 table(

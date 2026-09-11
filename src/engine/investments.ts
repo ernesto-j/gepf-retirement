@@ -167,8 +167,8 @@ export interface ProjectInvestmentOpts {
  *  - `startAge < fromAge` means the member already owns it: the value is grown and the loan
  *    amortised from `startAge` to `fromAge`, the first row carries no purchase cash, and the
  *    caller must treat the holding as funded from OUTSIDE the plan;
- *  - the last row is the sale (`event: 'sell'`, `saleProceedsZar` set, `equityZar` 0 because
- *    the equity has become proceeds).
+ *  - the last row is the sale (`event: 'sell'` with `saleProceedsZar` set; its `equityZar` is
+ *    the equity immediately BEFORE the sale, and a caller must count the proceeds, not both).
  *
  * Returns `[]` — never throws — when the investment has no price, is bought after `toAge`, or
  * has already been sold before `fromAge`.
@@ -262,7 +262,10 @@ export function projectCustomInvestment(
     const isBuy = k === kBuy && !alreadyOwned
     const justRepaid = hasLoan && openingLoan > 1e-9 && loanBalance <= 1e-9
 
-    let equityZar = (value - loanBalance) * fxEnd
+    // Reported for every year, the sale year included, where it is the equity immediately
+    // BEFORE the sale — the scenario reads `saleProceedsZar` instead in that year, so the
+    // asset is never counted twice.
+    const equityZar = (value - loanBalance) * fxEnd
     let saleProceedsZar: number | undefined
     let cgtCcy: number | undefined
     if (isSale) {
@@ -274,7 +277,6 @@ export function projectCustomInvestment(
       // The loan is settled out of the proceeds; `proceeds` may be negative when the asset is
       // worth less than the debt, which the scenario funds from discretionary capital.
       saleProceedsZar = finite((salePrice - sellingCosts - loanBalance - cgt) * fxEnd)
-      equityZar = 0
     }
 
     const row: CustomInvestmentYear = {
@@ -334,7 +336,8 @@ export function summariseInvestment(rows: CustomInvestmentYear[]): InvestmentSum
     purchaseCashZar += nonNeg(row?.purchaseCashZar)
     totalNetIncomeZar += num(row?.netCashZar)
     saleProceedsZar += num(row?.saleProceedsZar)
-    // The sale row reports zero closing equity, so the peak also looks at the opening equity.
+    // The sale row's `equityZar` is the value just before the sale; the opening equity covers
+    // the case of a holding whose value falls over the projection.
     peakEquityZar = Math.max(peakEquityZar, num(row?.equityZar), num(row?.openingEquityZar))
   }
   return {

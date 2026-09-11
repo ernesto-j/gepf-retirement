@@ -493,6 +493,10 @@ describe('projection: every YearRow reconciles', () => {
   })
 
   it('capitalStart - draws + investmentReturn - fees = capitalEnd (within R1)', () => {
+    // The full identity is `capitalStart - draws + investmentReturn - fees + customCashFlows =
+    // capitalEnd` (see the header of src/engine/projection.ts). Every profile on this grid has
+    // `investments: []`, so `customCashFlows` is 0 in every row and the short form below is the
+    // whole identity. tests/investments.test.ts asserts the full form with holdings present.
     for (const { label, result } of GRID) {
       for (const row of result.rows) {
         const lhs = row.capitalStart - row.drawGross + row.investmentReturn - row.fees
@@ -911,6 +915,8 @@ describe('edge inputs never produce NaN, Infinity or a broken row', () => {
         expect(row.capitalEnd).toBeGreaterThanOrEqual(-1e-6)
         expect(row.totalNetIncome).toBeGreaterThanOrEqual(-1e-6)
         expect(row.shortfall).toBeGreaterThanOrEqual(0)
+        // customCashFlows is 0 throughout: none of these edge profiles holds a custom investment.
+        expect(row.customCashFlows ?? 0).toBe(0)
         expect(Math.abs(row.capitalStart - row.drawGross + row.investmentReturn - row.fees - row.capitalEnd)).toBeLessThanOrEqual(1)
       }
       for (const [k, v] of Object.entries(r.totals)) expect(Number.isFinite(v), `${def.id} totals.${k}`).toBe(true)

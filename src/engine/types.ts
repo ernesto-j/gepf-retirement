@@ -347,6 +347,92 @@ export interface Assumptions {
   discretionaryReturnTaxRate: number
   /** Annual return volatility used for the optional stress test. */
   returnVolatility: number
+  /**
+   * Spot rand per unit of other hard currencies (USD uses usdZarSpot). All hard currencies are assumed to
+   * appreciate against the rand at `randDepreciation`; there is no separate USD/AUD path.
+   */
+  fxSpots?: { AUD: number; GBP: number; EUR: number }
+}
+
+// ---------------------------------------------------------------------------
+// Custom investments (the member's own holdings: an index ETF, a property with a loan, a fixed-term deposit)
+// ---------------------------------------------------------------------------
+
+export type InvestmentCurrency = 'ZAR' | 'USD' | 'AUD' | 'GBP' | 'EUR'
+export type CustomInvestmentKind = 'equity-index' | 'residential-property' | 'commercial-property' | 'fixed-term' | 'other'
+
+export interface CustomInvestmentLoan {
+  /** Loan amount in the investment's currency, drawn at purchase. */
+  amount: number
+  /** Nominal interest rate p.a. */
+  rate: number
+  termYears: number
+  /** Interest-only: no capital repayments; the balance is settled from sale proceeds. */
+  interestOnly: boolean
+}
+
+/**
+ * A holding the member sets up themselves. Value, income, costs and the loan are tracked in `currency`
+ * and converted to rand at the scenario's FX path. Net cash (income - costs - loan service - tax) counts
+ * toward the income target when `incomeUse` is 'spend'; negative carry is funded from discretionary savings.
+ * At the end of `termYears` (or the horizon) the asset is sold, the loan settled and the net proceeds
+ * (after selling costs and CGT) move to the discretionary pot in the same currency sleeve.
+ */
+export interface CustomInvestment {
+  id: string
+  name: string
+  kind: CustomInvestmentKind
+  enabled: boolean
+  currency: InvestmentCurrency
+  /** Age at which the investment is bought. If below the exit age it is treated as already owned (fundedFrom 'external'). */
+  startAge: number
+  /** Fixed holding period in years; undefined = held to the planning horizon. */
+  termYears?: number
+  /** 'exit-capital' takes the cash from the scenario's discretionary pot; 'external' is money outside the plan. */
+  fundedFrom: 'exit-capital' | 'external'
+  /** Cash put in (deposit / purchase amount less the loan), in `currency`. */
+  deposit: number
+  /** Once-off purchase costs (stamp duty, FIRB, transfer, brokerage) as a fraction of the purchase price. */
+  purchaseCostPct: number
+  loan?: CustomInvestmentLoan
+  /** Capital growth p.a. in `currency`. */
+  growth: number
+  /** Gross income yield p.a. on value (rent, dividends, interest). */
+  incomeYield: number
+  /** Running costs p.a. as a fraction of value (rates, levies, management, vacancy, TER). */
+  costsPct: number
+  /** Effective tax rate on net income (SA marginal, or foreign non-resident rate with SA credit). */
+  incomeTaxRate: number
+  /** Effective tax rate on the gain at sale. */
+  cgtRate: number
+  /** Selling costs as a fraction of the sale price. */
+  sellingCostPct: number
+  /** 'spend' counts net cash toward income; 'reinvest' adds it to the discretionary pot. */
+  incomeUse: 'spend' | 'reinvest'
+  notes?: string
+}
+
+/** One projected year of a custom investment (currency amounts plus rand conversions). */
+export interface CustomInvestmentYear {
+  age: number
+  year: number
+  /** Rand per unit of the investment's currency in this year. */
+  fx: number
+  valueCcy: number
+  loanBalanceCcy: number
+  grossIncomeCcy: number
+  costsCcy: number
+  interestCcy: number
+  principalCcy: number
+  taxCcy: number
+  /** Income - costs - interest - principal - tax (can be negative = cash the member must put in). */
+  netCashCcy: number
+  netCashZar: number
+  /** Value - loan balance, in rand. */
+  equityZar: number
+  /** Net proceeds in rand when sold this year (after selling costs, loan settlement and CGT). */
+  saleProceedsZar?: number
+  event?: 'buy' | 'sell' | 'loan-repaid'
 }
 
 export interface Profile {
@@ -354,6 +440,8 @@ export interface Profile {
   gepf: GepfMembership
   lifestyle: LifestyleInputs
   assumptions: Assumptions
+  /** The member's own investments, applied to every scenario. */
+  investments: CustomInvestment[]
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +467,19 @@ export interface FundInfo {
   /** All-in effective annual cost = tic + platformFee + adviceFee. */
   allInFee: number
   /** Annualised returns (nominal, net of TER), decimals; null if unavailable. */
-  returns: { y1: number | null; y3: number | null; y5: number | null; y10: number | null; sinceInception?: number | null }
+  returns: {
+    y1: number | null
+    y3: number | null
+    y5: number | null
+    y10: number | null
+    /** Long-run annualised returns where the fund is old enough; null/undefined otherwise. */
+    y15?: number | null
+    y20?: number | null
+    y30?: number | null
+    sinceInception?: number | null
+  }
+  /** ISO launch date of the class, to say how long the track record is. */
+  inceptionDate?: string
   /**
    * 'verified' = taken from a dated fact sheet in research/; 'approximate' = a labelled estimate used only so
    * the fund-history comparison can run (fact sheets could not be fetched). The UI marks approximate figures with ≈.
@@ -481,6 +581,10 @@ export interface YearRow {
   drawdownRate: number
   /** True when the 17.5% cap (or capital exhaustion) forced the income below target. */
   capped: boolean
+  /** Custom investments: net spendable cash (after tax) counted in totalNetIncome, equity value in rand, cash put in to fund negative carry or purchases. */
+  customIncomeNet: number
+  customEquityZar: number
+  customCashIn: number
 }
 
 export interface RiskFlag {
@@ -568,6 +672,17 @@ export interface ScenarioResult {
   flags: RiskFlag[]
   /** Human-readable assumptions used. */
   notes: string[]
+  /** Per custom investment: what it did in this scenario. */
+  customInvestments?: {
+    id: string
+    name: string
+    startAge: number
+    endAge: number
+    purchaseCashZar: number
+    totalNetIncomeZar: number
+    saleProceedsZar: number
+    peakEquityZar: number
+  }[]
 }
 
 export interface ComparisonResult {

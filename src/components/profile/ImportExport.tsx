@@ -106,6 +106,9 @@ export default function ImportExport() {
       person: { ...profile.person, ...person },
       gepf: { ...profile.gepf, ...gepf },
       lifestyle: { ...profile.lifestyle, ...lifestyle },
+      investments: Array.isArray((parsed as { profile?: { investments?: unknown } }).profile?.investments)
+        ? ((parsed as { profile: { investments: Profile['investments'] } }).profile.investments)
+        : profile.investments,
       assumptions: { ...profile.assumptions, ...assumptions },
     }
     replaceProfile(merged)

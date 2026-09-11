@@ -31,6 +31,7 @@ const profile: Profile = {
   gepf: { ...DEFAULT_PROFILE.gepf, ...raw.profile.gepf },
   lifestyle: { ...DEFAULT_PROFILE.lifestyle, ...raw.profile.lifestyle },
   assumptions: { ...DEFAULT_PROFILE.assumptions, ...raw.profile.assumptions },
+  investments: Array.isArray(raw.profile.investments) ? raw.profile.investments : [],
 }
 
 let rules: GepfRules = getGepfRules()

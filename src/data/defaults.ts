@@ -75,6 +75,7 @@ export const ASSUMPTION_PRESETS: Record<'sarb-target' | 'recent-history' | 'pess
     livingAnnuityMaxDrawdown: 0.175,
     discretionaryReturnTaxRate: 0.12,
     returnVolatility: 0.12,
+    fxSpots: { AUD: 10.8, GBP: 21.5, EUR: 18.8 },
   },
   'recent-history': {
     taxYear: DEFAULT_TAX_YEAR,
@@ -94,6 +95,7 @@ export const ASSUMPTION_PRESETS: Record<'sarb-target' | 'recent-history' | 'pess
     livingAnnuityMaxDrawdown: 0.175,
     discretionaryReturnTaxRate: 0.12,
     returnVolatility: 0.14,
+    fxSpots: { AUD: 10.8, GBP: 21.5, EUR: 18.8 },
   },
   pessimistic: {
     taxYear: DEFAULT_TAX_YEAR,
@@ -113,6 +115,7 @@ export const ASSUMPTION_PRESETS: Record<'sarb-target' | 'recent-history' | 'pess
     livingAnnuityMaxDrawdown: 0.175,
     discretionaryReturnTaxRate: 0.12,
     returnVolatility: 0.18,
+    fxSpots: { AUD: 10.8, GBP: 21.5, EUR: 18.8 },
   },
 }
 
@@ -123,4 +126,5 @@ export const DEFAULT_PROFILE: Profile = {
   gepf: DEFAULT_GEPF,
   lifestyle: DEFAULT_LIFESTYLE,
   assumptions: DEFAULT_ASSUMPTIONS,
+  investments: [],
 }

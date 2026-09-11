@@ -798,6 +798,9 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     const investmentReturn = capitalEnd - (capitalStart - drawGross) + feesThisYear
 
     const row: YearRow = {
+      customIncomeNet: 0,
+      customEquityZar: 0,
+      customCashIn: 0,
       year: i,
       age,
       cpiIndex: finite(cpiIndex),

@@ -124,6 +124,7 @@ export const useAppStore = create<AppState>()(
                 gepf: { ...DEFAULT_PROFILE.gepf, ...p.profile.gepf },
                 lifestyle: { ...DEFAULT_PROFILE.lifestyle, ...p.profile.lifestyle },
                 assumptions: { ...DEFAULT_PROFILE.assumptions, ...p.profile.assumptions },
+                investments: Array.isArray(p.profile.investments) ? p.profile.investments : [],
               }
             : current.profile,
           ai: { ...current.ai, ...(p.ai ?? {}) },

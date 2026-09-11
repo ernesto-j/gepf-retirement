@@ -3,14 +3,16 @@
  * Profile -> "Save or load this case"), runs the three core routes plus any saved scenarios,
  * prints a comparison table, net income at 5-year ages, and a sensitivity grid.
  *
- *   npx tsx scripts/run-scenarios.ts profiles/my-case.json [--old-factors] [--json]
+ *   npx tsx scripts/run-scenarios.ts profiles/my-case.json [--old-factors] [--json] [--per-fund]
  *
  * --old-factors  evaluates resignation values on the previous (2021) actuarial factor table
- * --json         prints the raw results as JSON instead of tables
+ * --json         prints the raw results as JSON instead of tables (always includes `perFund`)
+ * --per-fund     also prints the per-fund return-basis comparison table (see `perFund` below)
  */
 import { readFileSync } from 'node:fs'
 import { compareScenarios, defaultScenarios, runScenario } from '../src/engine/projection'
 import { gepfBenefitsAtExit, getGepfRules } from '../src/engine/gepf'
+import { fundGrossReturn } from '../src/engine/funds'
 import { getTaxTables } from '../src/engine/tax'
 import { FUNDS } from '../src/data/funds'
 import { DEFAULT_PROFILE } from '../src/data/defaults'
@@ -60,8 +62,37 @@ const sensitivities = sensitivityVariants.map((v) => ({
   }),
 }))
 
+// Per-fund comparison: the 'preserve' core route run once per investable fund, (a) with the
+// common return assumption (fees differ only) and (b) with returnBasis 'fund-history'.
+const preserveDef = defs.find((d) => d.id === 'preserve') ?? defs[1]
+const perFund = FUNDS.filter((f) => f.id !== 'gepf').map((fund) => {
+  const shared: Partial<ScenarioDefinition> = { fundId: fund.id, offshorePct: Math.min(preserveDef.offshorePct, fund.maxOffshore) }
+  const a = runScenario(profile, { ...preserveDef, ...shared, id: `perfund-a-${fund.id}`, returnBasis: 'assumption' }, deps)
+  const b = runScenario(profile, { ...preserveDef, ...shared, id: `perfund-b-${fund.id}`, returnBasis: 'fund-history' }, deps)
+  return {
+    fundId: fund.id,
+    fundName: fund.name,
+    type: fund.type,
+    allInFee: fund.allInFee,
+    y10: fund.returns.y10,
+    grossHistoricReturn: fundGrossReturn(fund),
+    assumption: {
+      incomeShortfallAge: a.incomeShortfallAge,
+      ruinAge: a.ruinAge,
+      lifetimeNetIncomeReal: a.totals.pvNetIncome,
+      legacyAtHorizonReal: a.totals.legacyAtHorizonReal,
+    },
+    fundHistory: {
+      incomeShortfallAge: b.incomeShortfallAge,
+      ruinAge: b.ruinAge,
+      lifetimeNetIncomeReal: b.totals.pvNetIncome,
+      legacyAtHorizonReal: b.totals.legacyAtHorizonReal,
+    },
+  }
+})
+
 if (args.includes('--json')) {
-  console.log(JSON.stringify({ profile, results, sensitivities }, null, 1))
+  console.log(JSON.stringify({ profile, results, sensitivities, perFund }, null, 1))
   process.exit(0)
 }
 
@@ -121,6 +152,28 @@ table(
     ...v.results.map((r) => `${r.ruinAge === null ? 'lasts' : 'out @' + Math.round(r.ruinAge)} / ${formatRand(r.pvNetIncome)}`),
   ]),
 )
+
+if (args.includes('--per-fund')) {
+  console.log(`\nPER-FUND: "${preserveDef.name}" route, (a) global return assumption vs (b) each fund's own historic return`)
+  const ageCell = (age: number | null) => (age === null ? 'never' : String(Math.round(age)))
+  table(
+    ['Fund', 'Type', 'All-in fee', '10yr', 'a: shortfall', 'a: ruin', 'a: lifetime income', 'a: capital left', 'b: shortfall', 'b: ruin', 'b: lifetime income', 'b: capital left'],
+    perFund.map((f) => [
+      f.fundName,
+      f.type,
+      formatPct(f.allInFee, 2),
+      f.y10 === null ? '—' : formatPct(f.y10, 1),
+      ageCell(f.assumption.incomeShortfallAge),
+      ageCell(f.assumption.ruinAge),
+      formatRand(f.assumption.lifetimeNetIncomeReal),
+      formatRand(f.assumption.legacyAtHorizonReal),
+      ageCell(f.fundHistory.incomeShortfallAge),
+      ageCell(f.fundHistory.ruinAge),
+      formatRand(f.fundHistory.lifetimeNetIncomeReal),
+      formatRand(f.fundHistory.legacyAtHorizonReal),
+    ]),
+  )
+}
 
 console.log('\nNOTES')
 results.forEach((r) => {

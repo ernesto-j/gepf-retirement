@@ -3,8 +3,10 @@ import type { FundInfo, ScenarioDefinition } from '../engine/types'
 import { formatPct, formatRandCompact } from '../engine/money'
 import { DEFAULT_FUND_ID, FUNDS, FUND_ARCHETYPES } from '../data/funds'
 import { useAppStore } from '../store/useAppStore'
+import { useResults } from '../store/useResults'
 import { EngineBoundary } from '../components/compare/helpers'
 import { FeeImpactChart } from '../components/funds/FeeImpactChart'
+import { FundHistoryTable } from '../components/funds/FundHistoryTable'
 import { FundTable } from '../components/funds/FundTable'
 import { Callout, Grid, PageHeader, Section } from '../components/ui'
 
@@ -23,17 +25,23 @@ export default function FundsPage() {
   const upsertScenario = useAppStore((s) => s.upsertScenario)
   const setPlannerSelection = useAppStore((s) => s.setPlannerSelection)
   const setPage = useAppStore((s) => s.setPage)
+  const results = useResults()
 
   const gepfFund = useMemo(() => FUNDS.find((f) => f.id === 'gepf'), [])
   const investableFunds = useMemo(() => FUNDS.filter((f) => f.type !== 'gepf'), [])
+  const preserveDefinition = useMemo(
+    () => results.coreDefinitions.find((d) => d.id === 'preserve') ?? results.coreDefinitions[1],
+    [results.coreDefinitions],
+  )
   const illustrativeCapital = 1_000_000
   const illustrativeReturn = profile.assumptions.localBalancedReturn
 
-  function handleUseInPlanner(fund: FundInfo) {
+  function handleUseInPlanner(fund: FundInfo, returnBasis?: ScenarioDefinition['returnBasis']) {
     const exitAge = profile.person.plannedExitAge
+    const historyLabel = returnBasis === 'fund-history' ? ' (its own history)' : ''
     const scenario: ScenarioDefinition = {
-      id: `custom-fund-${fund.id}`,
-      name: `Leave: preserve via ${fund.name}`,
+      id: `custom-fund-${fund.id}${returnBasis === 'fund-history' ? '-history' : ''}`,
+      name: `Leave: preserve via ${fund.name}${historyLabel}`,
       kind: 'resign-preserve',
       exitAge,
       retireFromPreservationAge: Math.max(55, exitAge),
@@ -41,6 +49,7 @@ export default function FundsPage() {
       offshorePct: Math.min(0.5, fund.maxOffshore),
       lumpSumAtRetirementPct: 1 / 3,
       drawdownStrategy: 'target-income',
+      returnBasis,
     }
     upsertScenario(scenario)
     setPlannerSelection(['stay', scenario.id])
@@ -63,6 +72,28 @@ export default function FundsPage() {
             and invest elsewhere.
           </Callout>
         )}
+      </Section>
+
+      <Section
+        title="Every fund in your living-annuity route"
+        description="The 'preserve & living annuity' route for your profile, run once per fund, so you can see how far the choice of fund alone moves the outcome."
+      >
+        <EngineBoundary>
+          {preserveDefinition ? (
+            <FundHistoryTable
+              profile={profile}
+              funds={results.funds}
+              tables={results.tables}
+              rules={results.rules}
+              baseDefinition={preserveDefinition}
+              onUseInPlanner={handleUseInPlanner}
+            />
+          ) : (
+            <Callout tone="warn" title="Not ready">
+              Could not build the preserve route for this profile yet.
+            </Callout>
+          )}
+        </EngineBoundary>
       </Section>
 
       <Section title="Three cost archetypes" description="A simplified way to think about the fund universe when you don't want to compare 11 funds line by line.">

@@ -2,6 +2,12 @@ import { useState } from 'react'
 import type { Assumptions, FundInfo, Profile, ScenarioDefinition, ScenarioKind } from '../../engine/types'
 import { Field, Grid, NumberInput, PercentInput, SelectInput, Toggle } from '../ui'
 import { DEFAULT_FUND_ID } from '../../data/funds'
+import { fundGrossReturn } from '../../engine/funds'
+
+const RETURN_BASIS_OPTIONS: { value: NonNullable<ScenarioDefinition['returnBasis']>; label: string }[] = [
+  { value: 'assumption', label: 'Global assumption' },
+  { value: 'fund-history', label: "This fund's 10-year history" },
+]
 
 const KIND_OPTIONS: { value: ScenarioKind; label: string }[] = [
   { value: 'stay-gepf', label: 'Stay: retire from the GEPF' },
@@ -79,6 +85,16 @@ export function ScenarioForm({
   const isResign = def.kind !== 'stay-gepf'
   const isCash = def.kind === 'resign-cash'
 
+  const selectedFund = funds.find((f) => f.id === def.fundId)
+  const historicReturn = selectedFund ? fundGrossReturn(selectedFund) : null
+  const globalReturn = profile.assumptions.localBalancedReturn
+  const returnBasisNote =
+    (def.returnBasis ?? 'assumption') === 'fund-history'
+      ? historicReturn !== null && selectedFund
+        ? `→ ${(historicReturn * 100).toFixed(1)}% gross (${selectedFund.name}'s own history, net return + TER; not a forecast)`
+        : `→ falls back to ${(globalReturn * 100).toFixed(1)}% (this fund has no historic return on record)`
+      : `→ ${(globalReturn * 100).toFixed(1)}% gross (the global assumption)`
+
   return (
     <form
       className="card space-y-4 border-brand-200"
@@ -119,6 +135,13 @@ export function ScenarioForm({
           min={0}
           max={0.05}
           step={0.01}
+        />
+        <SelectInput
+          label="Return basis"
+          value={def.returnBasis ?? 'assumption'}
+          onChange={(returnBasis) => patch({ returnBasis })}
+          options={RETURN_BASIS_OPTIONS}
+          help={returnBasisNote}
         />
         {isStay ? (
           <PercentInput

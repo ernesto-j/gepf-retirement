@@ -160,6 +160,25 @@ function scenario(overrides: Partial<ScenarioDefinition>): ScenarioDefinition {
   }
 }
 
+/**
+ * 'stay-gepf' with the gratuity invested 100% offshore: the gratuity pot ends up wholly in the
+ * offshore sleeve (local 0), so its growth depends only on `offshoreReturnUsd` — never on
+ * `effectiveLocalReturn` — regardless of `returnBasis`.
+ */
+function stayScenarioFullyOffshore(overrides: Partial<ScenarioDefinition>): ScenarioDefinition {
+  return {
+    id: 'stay-test',
+    name: 'Stay test',
+    kind: 'stay-gepf',
+    exitAge: 60,
+    fundId: 'test-fund',
+    offshorePct: 0,
+    gratuityOffshorePct: 1,
+    drawdownStrategy: 'target-income',
+    ...overrides,
+  }
+}
+
 describe('runScenario with returnBasis', () => {
   const historicFund = testFund({ id: 'test-fund', ter: 0.0052, allInFee: 0.01, returns: { y1: null, y3: 0.08, y5: 0.09, y10: 0.099 } })
   const noHistoryFund = testFund({ id: 'test-fund', ter: 0.0052, allInFee: 0.01, returns: { y1: null, y3: null, y5: null, y10: null } })
@@ -188,18 +207,18 @@ describe('runScenario with returnBasis', () => {
     expect(r.notes.some((n) => n.includes('no historic return on record') && n.includes('falls back'))).toBe(true)
   })
 
-  it('never changes the offshore sleeve: an offshore-only pot grows identically under both bases', () => {
-    const offshoreProfile = base()
-    const withAssumption = runScenario(
-      offshoreProfile,
-      scenario({ offshorePct: 1, returnBasis: 'assumption' }),
-      { tables: TABLES, rules: RULES, funds: [historicFund] },
-    )
-    const withHistory = runScenario(
-      offshoreProfile,
-      scenario({ offshorePct: 1, returnBasis: 'fund-history' }),
-      { tables: TABLES, rules: RULES, funds: [historicFund] },
-    )
+  it('never changes the offshore sleeve: a fully offshore pot grows identically under both bases', () => {
+    const withAssumption = runScenario(profile, stayScenarioFullyOffshore({ returnBasis: 'assumption' }), {
+      tables: TABLES,
+      rules: RULES,
+      funds: [historicFund],
+    })
+    const withHistory = runScenario(profile, stayScenarioFullyOffshore({ returnBasis: 'fund-history' }), {
+      tables: TABLES,
+      rules: RULES,
+      funds: [historicFund],
+    })
+    expect(withHistory.rows[0]!.capitalLocal).toBeCloseTo(0, 2)
     expect(withHistory.rows[0]!.capitalOffshoreUsd).toBeCloseTo(withAssumption.rows[0]!.capitalOffshoreUsd, 6)
     expect(withHistory.rows[0]!.investmentReturn).toBeCloseTo(withAssumption.rows[0]!.investmentReturn, 2)
   })

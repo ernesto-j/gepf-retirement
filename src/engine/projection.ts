@@ -31,7 +31,11 @@
  *        the year's return is taxed at `discretionaryReturnTaxRate` and there is no
  *        drawdown limit.
  *    Every pot runs through the same yearly loop: draw -> rebalance to the target offshore
- *    share -> grow -> pay fees (and return tax).
+ *    share -> grow -> pay fees (and return tax). All pots grow the LOCAL sleeve at
+ *    `effectiveLocalReturn`, which is `localBalancedReturn` unless `def.returnBasis ===
+ *    'fund-history'`, in which case it is the selected fund's own historic gross return
+ *    (`fundGrossReturn` in src/engine/funds.ts) when available, else the assumption with a
+ *    note. The offshore sleeve always uses `offshoreReturnUsd`.
  * 4. Draw: the gross draw that makes total net income equal the target is solved with
  *    `grossForNet(target, age, tables, { otherTaxableIncome })`. The living annuity is drawn
  *    first (clamped to [min, max] x capitalStart), then the discretionary pots (unclamped,
@@ -90,6 +94,7 @@ import type {
   YearRow,
 } from './types'
 import { DEFAULT_FUND_ID, FUNDS } from '../data/funds'
+import { fundGrossReturn } from './funds'
 import { gepfBenefitsAtExit, getGepfRules } from './gepf'
 import { clamp } from './money'
 import { prosCons, riskFlags } from './insights'
@@ -387,6 +392,23 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   if (!fund) notes.push(`Fund "${def.fundId}" was not found; a ${(FALLBACK_FEE * 100).toFixed(1)}% all-in fee has been assumed.`)
   const fee = fraction(def.feeOverride ?? fund?.allInFee, FALLBACK_FEE)
   const fundMaxOffshore = fund && fund.type !== 'gepf' ? fraction(fund.maxOffshore, 1) : 1
+
+  // Return basis: 'fund-history' grows the LOCAL sleeve at the fund's own historic gross
+  // return instead of the global assumption (the offshore sleeve is never affected).
+  let effectiveLocalReturn = a.localBalancedReturn
+  if (def.returnBasis === 'fund-history') {
+    const historic = fund ? fundGrossReturn(fund) : null
+    if (historic !== null && fund) {
+      effectiveLocalReturn = historic
+      notes.push(
+        `This scenario grows local capital at ${fund.name}'s own historic return (${(historic * 100).toFixed(1)}% gross — its longest available fact-sheet return, net of TER, grossed back up by TER) instead of the ${(a.localBalancedReturn * 100).toFixed(1)}% global return assumption. Past returns are not a forecast of future performance; the offshore sleeve still uses the global assumption.`,
+      )
+    } else {
+      notes.push(
+        `${fund ? fund.name : 'The selected fund'} has no historic return on record, so this scenario falls back to the ${(a.localBalancedReturn * 100).toFixed(1)}% global return assumption.`,
+      )
+    }
+  }
 
   const benefits = gepfBenefitsAtExit(profile, exitAge, rules)
   const { retirement, resignation, serviceYears, finalSalaryAnnual } = benefits
@@ -702,7 +724,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
     for (const pot of pots) {
       feesThisYear += rebalance(pot, usdZar, a.fxConversionCost)
       const localFee = pot.local * pot.fee
-      const localGain = pot.local * a.localBalancedReturn - localFee
+      const localGain = pot.local * effectiveLocalReturn - localFee
       const offshoreFeeUsd = pot.offshoreUsd * pot.fee
       const offshoreGainUsd = pot.offshoreUsd * a.offshoreReturnUsd - offshoreFeeUsd
       const localTax = pot.taxedReturns ? Math.max(0, localGain) * a.discretionaryReturnTaxRate : 0
@@ -820,7 +842,7 @@ export function runScenario(profile: Profile, def: ScenarioDefinition, deps?: Ru
   }
 
   notes.push(
-    `Capital is drawn at the start of each year and grows for the rest of it; returns are ${(a.localBalancedReturn * 100).toFixed(1)}% locally and ${(a.offshoreReturnUsd * 100).toFixed(1)}% in US dollars before a ${(fee * 100).toFixed(2)}% all-in fee, with no volatility.`,
+    `Capital is drawn at the start of each year and grows for the rest of it; returns are ${(effectiveLocalReturn * 100).toFixed(1)}% locally and ${(a.offshoreReturnUsd * 100).toFixed(1)}% in US dollars before a ${(fee * 100).toFixed(2)}% all-in fee, with no volatility.`,
     'Discretionary withdrawals are not taxed as income; the CGT / dividends / interest drag is charged on the return each year instead.',
     'The GEPF pension has no capital value at the horizon: the spouse pension continues while your spouse lives but is not included in the legacy figure.',
   )

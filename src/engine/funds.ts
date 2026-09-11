@@ -61,6 +61,23 @@ export function feeImpact(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// Fund-history return basis
+// ---------------------------------------------------------------------------
+
+/**
+ * The fund's own historic GROSS return, for scenarios with `returnBasis: 'fund-history'`
+ * (src/engine/projection.ts): its longest available annualised return (10yr, else 5yr, else
+ * 3yr) grossed back up by adding the fund's TER, since fact-sheet returns are net of TER while
+ * the engine deducts its own all-in fee. `null` when the fund has no historic return on record
+ * at all (the caller falls back to the global return assumption).
+ */
+export function fundGrossReturn(fund: FundInfo): number | null {
+  const net = fund.returns.y10 ?? fund.returns.y5 ?? fund.returns.y3 ?? null
+  if (net === null) return null
+  return net + num(fund.ter, 0)
+}
+
+// ---------------------------------------------------------------------------
 // Ranking / lookup
 // ---------------------------------------------------------------------------
 

@@ -377,6 +377,14 @@ export interface ScenarioDefinition {
   drawdownPct?: number
   /** Optional overrides of global assumptions for this scenario. */
   overrides?: Partial<Assumptions>
+  /**
+   * Where the LOCAL sleeve's gross investment return comes from. `'assumption'` (the default
+   * when omitted) uses `Assumptions.localBalancedReturn`; `'fund-history'` uses the selected
+   * fund's own historic return (`fundGrossReturn` in src/engine/funds.ts) when the fund has one
+   * on record, falling back to the assumption (with a note) otherwise. Never changes the
+   * offshore sleeve's return.
+   */
+  returnBasis?: 'assumption' | 'fund-history'
 }
 
 export interface YearRow {

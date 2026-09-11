@@ -4,6 +4,7 @@ import type {
   AiChatMessage,
   AppPage,
   Assumptions,
+  CustomInvestment,
   GepfMembership,
   LifestyleInputs,
   PersonProfile,
@@ -35,6 +36,8 @@ export interface AppState {
   setGepf: (patch: Partial<GepfMembership>) => void
   setLifestyle: (patch: Partial<LifestyleInputs>) => void
   setAssumptions: (patch: Partial<Assumptions>) => void
+  /** Replace the member's own investments (index ETF, offshore property, fixed deposits, …) wholesale. */
+  setInvestments: (list: CustomInvestment[]) => void
   replaceProfile: (profile: Profile) => void
   upsertScenario: (scenario: ScenarioDefinition) => void
   removeScenario: (id: string) => void
@@ -69,6 +72,7 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ profile: { ...s.profile, lifestyle: { ...s.profile.lifestyle, ...patch } } })),
       setAssumptions: (patch) =>
         set((s) => ({ profile: { ...s.profile, assumptions: { ...s.profile.assumptions, ...patch } } })),
+      setInvestments: (list) => set((s) => ({ profile: { ...s.profile, investments: list } })),
       replaceProfile: (profile) => set({ profile }),
       upsertScenario: (scenario) =>
         set((s) => {

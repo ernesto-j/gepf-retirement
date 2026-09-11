@@ -428,11 +428,21 @@ export interface CustomInvestmentYear {
   /** Income - costs - interest - principal - tax (can be negative = cash the member must put in). */
   netCashCcy: number
   netCashZar: number
-  /** Value - loan balance, in rand. */
+  /** Value - loan balance, in rand, at the END of the year (0 in the sale year: it has become `saleProceedsZar`). */
   equityZar: number
   /** Net proceeds in rand when sold this year (after selling costs, loan settlement and CGT). */
   saleProceedsZar?: number
   event?: 'buy' | 'sell' | 'loan-repaid'
+  /**
+   * Value - loan balance in rand at the START of the year (this year's rate). Equal to the
+   * previous row's `equityZar`; on the FIRST row it is the equity the holding brings into the
+   * plan, which is what `YearRow.customCashFlows` books when it is funded from outside.
+   */
+  openingEquityZar?: number
+  /** Cash paid at purchase (deposit + entry costs) in rand — only on the 'buy' row. */
+  purchaseCashZar?: number
+  /** Capital gains tax paid at the sale, in the investment's currency — only on the 'sell' row. */
+  cgtCcy?: number
 }
 
 export interface Profile {
@@ -585,6 +595,15 @@ export interface YearRow {
   customIncomeNet: number
   customEquityZar: number
   customCashIn: number
+  /**
+   * Bridge term of the capital roll-forward when custom investments are held:
+   * `capitalStart - drawGross + investmentReturn - fees + customCashFlows = capitalEnd`.
+   * It is the equity a custom investment brings in from OUTSIDE the plan (one funded
+   * 'external', or one already owned appearing at the exit age) less any purchase cash the
+   * plan's own pots paid. 0 in every year with no purchase, and in every scenario with no
+   * custom investments.
+   */
+  customCashFlows?: number
 }
 
 export interface RiskFlag {

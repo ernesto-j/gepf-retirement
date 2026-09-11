@@ -4,7 +4,7 @@
  * (comments show the arithmetic).
  */
 import { describe, expect, it, vi } from 'vitest'
-import { feeImpact, fundById, rankFunds } from '../src/engine/funds'
+import { feeImpact, fundById, fundLongRunReturn, growthOfCapital, rankFunds } from '../src/engine/funds'
 import { FUNDS } from '../src/data/funds'
 import type { FundInfo } from '../src/engine/types'
 
@@ -126,5 +126,84 @@ describe('fundById', () => {
     expect(fallback.id).toBe(FUNDS.find((f) => f.id !== 'gepf')!.id)
     expect(warnSpy).toHaveBeenCalledTimes(1)
     warnSpy.mockRestore()
+  })
+})
+
+describe('fundLongRunReturn', () => {
+  it('returns null/—  when the fund has no long-run figure at all', () => {
+    const f = fund({ id: 'none', returns: { y1: null, y3: null, y5: null, y10: null } })
+    expect(fundLongRunReturn(f)).toEqual({ rate: null, years: null, label: '—' })
+  })
+
+  it('picks the longest available fixed bucket (y10 < y20) when there is no sinceInception', () => {
+    const f = fund({ id: 'buckets', returns: { y1: null, y3: null, y5: null, y10: 0.08, y20: 0.09 } })
+    expect(fundLongRunReturn(f)).toEqual({ rate: 0.09, years: 20, label: '20-yr' })
+  })
+
+  it('falls back to y10 when it is the only figure on record', () => {
+    const f = fund({ id: 'y10-only', returns: { y1: null, y3: null, y5: null, y10: 0.0991 } })
+    expect(fundLongRunReturn(f)).toEqual({ rate: 0.0991, years: 10, label: '10-yr' })
+  })
+
+  it('prefers sinceInception over a shorter fixed bucket when the fund is old enough (PSG Balanced-style: y20 only, ~27 yrs since launch)', () => {
+    const f = fund({
+      id: 'psg-like',
+      inceptionDate: '1999-06-01',
+      returns: { y1: null, y3: null, y5: null, y10: null, y20: 0.105, sinceInception: 0.107 },
+    })
+    expect(fundLongRunReturn(f, { today: '2026-09-11' })).toEqual({ rate: 0.107, years: 27, label: 'since 1999 (27 yrs)' })
+  })
+
+  it('keeps a fixed bucket over sinceInception on an exact tie in years', () => {
+    const f = fund({
+      id: 'tie',
+      inceptionDate: '1996-08-01', // floors to exactly 30 years before the `today` override below
+      returns: { y1: null, y3: null, y5: null, y10: null, y30: 0.125, sinceInception: 0.13 },
+    })
+    expect(fundLongRunReturn(f, { today: '2026-09-11' })).toEqual({ rate: 0.125, years: 30, label: '30-yr' })
+  })
+
+  it('ignores sinceInception without an inceptionDate (nothing to compute years from)', () => {
+    const f = fund({
+      id: 'no-inception-date',
+      returns: { y1: null, y3: null, y5: null, y10: null, y15: 0.1, sinceInception: 0.2 },
+    })
+    expect(fundLongRunReturn(f)).toEqual({ rate: 0.1, years: 15, label: '15-yr' })
+  })
+
+  it('the real PSG Balanced fund data resolves to its since-inception figure with a ~27-year label', () => {
+    const psg = FUNDS.find((f) => f.id === 'psg-balanced')!
+    const r = fundLongRunReturn(psg)
+    expect(r.label).toMatch(/^since 1999 \(\d+ yrs\)$/)
+    expect(r.rate).toBeCloseTo(0.107, 10)
+  })
+
+  it('runs the whole real fund data set without throwing', () => {
+    for (const f of FUNDS) expect(() => fundLongRunReturn(f)).not.toThrow()
+  })
+})
+
+describe('growthOfCapital', () => {
+  it('R1m at 10% net for 30 years compounds to 1,000,000 x 1.1^30', () => {
+    const expected = 1_000_000 * 1.1 ** 30
+    expect(growthOfCapital(0.12, 0.02, 30)).toBeCloseTo(expected, 4)
+  })
+
+  it('defaults capital to R1,000,000', () => {
+    expect(growthOfCapital(0.1, 0, 10)).toBeCloseTo(1_000_000 * 1.1 ** 10, 4)
+  })
+
+  it('a null rate returns the starting capital unchanged (no guessed growth path)', () => {
+    expect(growthOfCapital(null, 0.02, 30)).toBe(1_000_000)
+    expect(growthOfCapital(null, 0.02, 30, 500_000)).toBe(500_000)
+  })
+
+  it('zero years returns the starting capital unchanged', () => {
+    expect(growthOfCapital(0.1, 0.02, 0)).toBe(1_000_000)
+  })
+
+  it('NaN guards: bad inputs never produce NaN', () => {
+    const r = growthOfCapital(Number.NaN, Number.NaN, Number.NaN, Number.NaN)
+    expect(Number.isNaN(r)).toBe(false)
   })
 })

@@ -3,7 +3,21 @@ import type { FundInfo } from '../../engine/types'
 import { formatPct } from '../../engine/money'
 import { Badge, DataTable, td, th } from '../ui'
 
-type SortKey = 'name' | 'ter' | 'tc' | 'tic' | 'platformFee' | 'adviceFee' | 'allInFee' | 'y1' | 'y3' | 'y5' | 'y10' | 'maxOffshore'
+type SortKey =
+  | 'name'
+  | 'ter'
+  | 'tc'
+  | 'tic'
+  | 'platformFee'
+  | 'adviceFee'
+  | 'allInFee'
+  | 'y1'
+  | 'y3'
+  | 'y5'
+  | 'y10'
+  | 'y20'
+  | 'sinceLaunch'
+  | 'maxOffshore'
 type SortDir = 'asc' | 'desc'
 
 const TYPE_LABEL: Record<FundInfo['type'], string> = {
@@ -44,6 +58,10 @@ function sortValue(f: FundInfo, key: SortKey): number | string {
       return f.returns.y5 ?? -Infinity
     case 'y10':
       return f.returns.y10 ?? -Infinity
+    case 'y20':
+      return f.returns.y20 ?? -Infinity
+    case 'sinceLaunch':
+      return f.returns.sinceInception ?? -Infinity
     case 'maxOffshore':
       return f.maxOffshore
   }
@@ -118,6 +136,8 @@ export function FundTable({ funds, onUseInPlanner }: { funds: FundInfo[]; onUseI
           <HeaderCell label="3yr" sortKey="y3" sort={sort} onSort={onSort} />
           <HeaderCell label="5yr" sortKey="y5" sort={sort} onSort={onSort} />
           <HeaderCell label="10yr" sortKey="y10" sort={sort} onSort={onSort} />
+          <HeaderCell label="20yr" sortKey="y20" sort={sort} onSort={onSort} help="Annualised return over the longest available period up to 20 years, net of TER" />
+          <HeaderCell label="Since launch" sortKey="sinceLaunch" sort={sort} onSort={onSort} help="Annualised return since the fund's inception, net of TER" />
           <HeaderCell label="Max offshore" sortKey="maxOffshore" sort={sort} onSort={onSort} help="Maximum offshore exposure available in a living annuity holding this fund" />
           <th scope="col" className={`${th} text-left`}>
             Reg 28
@@ -151,6 +171,23 @@ export function FundTable({ funds, onUseInPlanner }: { funds: FundInfo[]; onUseI
             <td className={`${td} text-right`}>{retCell(f.returns.y3)}</td>
             <td className={`${td} text-right`}>{retCell(f.returns.y5)}</td>
             <td className={`${td} text-right`} title={f.returnsConfidence === 'approximate' ? 'Approximate: fact sheet not verified' : undefined}>{retCell(f.returns.y10)}{f.returnsConfidence === 'approximate' && f.returns.y10 !== null ? ' ≈' : ''}</td>
+            <td className={`${td} text-right`} title={f.returnsConfidence === 'approximate' ? 'Approximate: fact sheet not verified' : undefined}>
+              {retCell(f.returns.y20)}
+              {f.returnsConfidence === 'approximate' && f.returns.y20 != null ? ' ≈' : ''}
+            </td>
+            <td className={`${td} text-right`} title={f.returnsConfidence === 'approximate' ? 'Approximate: fact sheet not verified' : undefined}>
+              {f.returns.sinceInception != null ? (
+                <>
+                  {retCell(f.returns.sinceInception)}
+                  {f.returnsConfidence === 'approximate' ? ' ≈' : ''}
+                  {f.inceptionDate && <span className="ml-1 text-xs text-slate-400">(since {f.inceptionDate.slice(0, 4)})</span>}
+                </>
+              ) : f.inceptionDate ? (
+                <span className="text-xs text-slate-400">since {f.inceptionDate.slice(0, 4)}</span>
+              ) : (
+                '—'
+              )}
+            </td>
             <td className={`${td} text-right`}>{formatPct(f.maxOffshore, 0)}</td>
             <td className={td}>{f.reg28 ? <Badge tone="ok">Yes</Badge> : <Badge tone="neutral">No</Badge>}</td>
             <td className={td}>

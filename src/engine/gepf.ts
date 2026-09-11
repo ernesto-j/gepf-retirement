@@ -160,9 +160,19 @@ interface UnreducedBenefit {
   serviceYears: number
 }
 
-function unreducedBenefit(finalSalaryAnnual: number, serviceYears: number, rules: GepfRules, ageAtExit?: number): UnreducedBenefit {
+function unreducedBenefit(
+  finalSalaryAnnual: number,
+  serviceYears: number,
+  rules: GepfRules,
+  ageAtExit?: number,
+  annuityServiceYears?: number,
+): UnreducedBenefit {
   const fs = Math.max(0, num(finalSalaryAnnual))
   const years = Math.max(0, num(serviceYears))
+  // Two-pot: the annuity is paid from the vested and retirement components only, so the
+  // savings-component service (about 1/3 of service after 1 Sept 2024) is excluded from the
+  // annuity formula; the gratuity uses all service. Verified against a real 2025 GEPF estimate.
+  const annuityYears = annuityServiceYears !== undefined && Number.isFinite(annuityServiceYears) ? clamp(annuityServiceYears, 0, years) : years
   if (years < rules.minServiceYearsForPension) {
     // < 10 years: GEPF pays the actuarial interest (N x FS x F(Z)) as a once-off gratuity. When the
     // exit age is known we use the factor table; otherwise fall back to the 0.15 x FS x N proxy.
@@ -172,7 +182,7 @@ function unreducedBenefit(finalSalaryAnnual: number, serviceYears: number, rules
   }
   return {
     gratuity: rules.gratuityFactor * fs * years,
-    annuity: (fs * years) / rules.annuityDivisor + rules.annuityFixedAddition,
+    annuity: (fs * annuityYears) / rules.annuityDivisor + rules.annuityFixedAddition,
     gratuityOnly: false,
     finalSalary: fs,
     serviceYears: years,
@@ -411,7 +421,9 @@ export function gepfBenefitsAtExit(
   const spousePensionPct = person.hasSpouse ? num(person.spousePensionPct, rules.spousePensionDefault * 100) : 0
   const exempt = deps?.exemptFromEarlyReduction
 
-  const formula = unreducedBenefit(finalSalaryAnnual, serviceYears, rules, ageAtExit)
+  const postTwoPotYears = Math.max(0, serviceYears - serviceYearsBeforeTwoPot)
+  const annuityServiceYears = serviceYears - postTwoPotYears / 3
+  const formula = unreducedBenefit(finalSalaryAnnual, serviceYears, rules, ageAtExit, annuityServiceYears)
 
   const st = m.useStatementValues ? m.statement : undefined
   const stResignation = st ? positive(st.resignationBenefit) : undefined
@@ -469,8 +481,16 @@ export function gepfBenefitsAtExit(
         aiPrevious = (stResignation * factorPrevAtStatement) / factorNewAtStatement
       }
     }
-    const actuarialInterest = aiCurrent * growth
+    // A statement resignation value is a CURRENT value (service to the statement date, factor at the
+    // statement age). Grow it to the exit by salary growth, by the service accrued until exit and by
+    // the change in F(Z) between the statement age and the exit age (same basis).
+    const serviceAtStatement = Math.max(0.5, positive(statement.pensionableServiceYears) ?? serviceYears - growthYears)
+    const serviceGrowth = Math.max(1, serviceYears / serviceAtStatement)
     const factorUsed = interpolateFactor(rules.actuarialFactors, ageAtExit)
+    const factorGrowth = factorNewAtStatement > 0 ? factorUsed / factorNewAtStatement : 1
+    const prevFactorGrowth =
+      prev && factorPrevAtStatement !== undefined && factorPrevAtStatement > 0 ? interpolateFactor(prev, ageAtExit) / factorPrevAtStatement : factorGrowth
+    const actuarialInterest = aiCurrent * growth * serviceGrowth * factorGrowth
     // Report the unreduced gratuity as the gratuity part; the remainder is the implied annuity value.
     const gratuityComponent = Math.min(unreduced.gratuity, actuarialInterest)
     const annuityComponent = actuarialInterest - gratuityComponent
@@ -481,7 +501,7 @@ export function gepfBenefitsAtExit(
       annuityComponent,
       ...splitTwoPot(actuarialInterest, preShare, rules),
     }
-    if (aiPrevious !== undefined) resignation.actuarialInterestPreviousFactors = aiPrevious * growth
+    if (aiPrevious !== undefined) resignation.actuarialInterestPreviousFactors = aiPrevious * growth * serviceGrowth * prevFactorGrowth
   }
 
   if (shares) {

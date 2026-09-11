@@ -15,7 +15,8 @@
     "e2e": "playwright test",
     "preview": "vite preview",
     "start": "NODE_ENV=production tsx server/index.ts",
-    "build:single": "tsc -b && vite build --config vite.config.single.ts"
+    "build:single": "tsc -b && vite build --config vite.config.single.ts",
+    "scenarios": "tsx scripts/run-scenarios.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

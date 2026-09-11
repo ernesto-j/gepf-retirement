@@ -202,8 +202,15 @@ describe('gepfBenefitsAtExit statement path — factor-table rebasing', () => {
     // aiCurrent  = statementValue x factorNew / factorPrev (rebased onto the current, lower, factors)
     // growth = 1 (salaryGrowth = 0, and exit age 60 is used below so growthYears could be > 0 but
     // (1+0)^n = 1 regardless).
-    const expectedAiPrevious = 500_000
-    const expectedAiCurrent = (500_000 * factorNewAtStatement) / factorPrevAtStatement
+    // The statement value is a current value: it also grows with the service accrued to the exit and
+    // with the change in F(Z) from the statement age to the exit age (each on its own basis).
+    const serviceYearsAtExit = profile.gepf.pensionableServiceYearsNow + 3
+    const growthYears = 3 + yearsSinceStatement
+    const serviceGrowth = serviceYearsAtExit / (serviceYearsAtExit - growthYears)
+    const factorGrowthNew = interpolateFactor(RULES.actuarialFactors, 60) / factorNewAtStatement
+    const factorGrowthPrev = interpolateFactor(RULES.previousActuarialFactors!, 60) / factorPrevAtStatement
+    const expectedAiPrevious = 500_000 * serviceGrowth * factorGrowthPrev
+    const expectedAiCurrent = ((500_000 * factorNewAtStatement) / factorPrevAtStatement) * serviceGrowth * factorGrowthNew
 
     const { resignation } = gepfBenefitsAtExit(profile, 60, RULES)
     expect(resignation.actuarialInterest).toBeCloseTo(expectedAiCurrent, 4)

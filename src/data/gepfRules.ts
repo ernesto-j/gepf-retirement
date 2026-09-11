@@ -27,30 +27,38 @@ function actuarialCurve(
   decayRate: number,
 ): { age: number; factor: number }[] {
   return ages.map((age) => {
-    const f = age <= 60 ? factorAt60 * Math.exp(-decayRate * (60 - age)) : factorAt60 * 0.99 ** (age - 60)
+    const f = factorAt60 * Math.exp(decayRate * (Math.min(age, 65) - 60))
     return { age, factor: Math.round(f * 10000) / 10000 }
   })
 }
 
 const AGES = [20, 25, 30, 35, 40, 41, 45, 50, 55, 58, 60, 62, 65]
 
-// Calibration: solve factorAt60 and decayRate so the z<=60 branch of the curve passes exactly
-// through the two known GEPF FAQ data points, F(40)=0.2036 and F(41)=0.20431 (see comment above).
+// Calibration. Two independent anchors on the 2021 basis:
+//  * F(40) = 0.2036 from the GEPF FAQ example (10 yrs x R300,000 x 0.2036 = R610,800).
+//  * F(62.7) = 0.2629 back-solved from a real GEPF "Estimate of Benefits" dated 31 May 2025 (i.e. on the
+//    2021 factors): total resignation benefit R7,189,401.44 with 25 years 2 months' pensionable service
+//    and a final average salary of R1,086,619.08 -> 7,189,401.44 / (25.1667 x 1,086,619.08) = 0.2629
+//    (member then aged ~62.7). This is a much flatter curve than an extrapolation from the two FAQ
+//    points (40 and 41) implied, so the 62.7 anchor takes precedence for the slope; the FAQ's F(41) =
+//    0.20431 is then reproduced to within 1% (curve gives 0.2059).
+// The z<=60 branch is an exponential through the two anchors; above 60 the same exponential continues
+// (the statement anchor sits above 60), capped at age 65 where compulsory retirement applies.
 const ANCHOR_AGE_LOW = 40
 const ANCHOR_FACTOR_LOW = 0.2036
-const ANCHOR_AGE_HIGH = 41
-const ANCHOR_FACTOR_HIGH = 0.20431
+const ANCHOR_AGE_HIGH = 62.7
+const ANCHOR_FACTOR_HIGH = 0.2629
 const DECAY_RATE = Math.log(ANCHOR_FACTOR_HIGH / ANCHOR_FACTOR_LOW) / (ANCHOR_AGE_HIGH - ANCHOR_AGE_LOW)
-const FACTOR_AT_60_2021 = ANCHOR_FACTOR_LOW / Math.exp(-DECAY_RATE * (60 - ANCHOR_AGE_LOW))
+const FACTOR_AT_60_2021 = ANCHOR_FACTOR_LOW * Math.exp(DECAY_RATE * (60 - ANCHOR_AGE_LOW))
 
 const FACTORS_2021: ActuarialFactorTable = {
-  label: 'GEPF actuarial interest factors, 2021 basis (effective 1 Nov 2022) — anchored to 2 known points',
+  label: 'GEPF actuarial interest factors, 2021 basis (effective 1 Nov 2022) — anchored to a FAQ example and a real May 2025 statement',
   effectiveFrom: '2022-11-01',
   points: actuarialCurve(AGES, FACTOR_AT_60_2021, DECAY_RATE),
   source: 'https://www.gepf.co.za/frequently-asked-questions/',
   confidence: 'medium',
   note:
-    'Anchored exactly at the two known GEPF FAQ examples, F(40) = 0.2036 and F(41) = 0.20431 (their dating suggests, but does not confirm, the 2021 basis). The shape between/beyond those ages (exponential decay to age 60, then a slow decline after 60) is still an estimate — the published Appendix 8 table was not retrievable. Replace with the full table if it becomes available.',
+    'Anchored at the GEPF FAQ example F(40) = 0.2036 and at F(62.7) = 0.2629 back-solved from a real 31 May 2025 benefit statement (2021 basis); the FAQ F(41) = 0.20431 is reproduced within 1%. The shape between and beyond the anchors is an exponential estimate — the published Appendix 8 table was not retrievable. Replace with the full table if it becomes available.',
 }
 
 const FACTORS_2025: ActuarialFactorTable = {

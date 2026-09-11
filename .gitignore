@@ -30,3 +30,7 @@ test-results
 playwright-report
 e2e/screenshots
 dist-single
+
+# personal case files (keep out of git)
+profiles/*.json
+!profiles/example.json

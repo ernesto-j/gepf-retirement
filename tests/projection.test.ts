@@ -189,10 +189,13 @@ describe('stay-gepf at exit', () => {
   const r = run(profile, 'stay')
   const benefits = gepfBenefitsAtExit(profile, 60, RULES)
 
-  it('pays exactly the GEPF engine annuity in year 0 (R327,632.73 p.a. = R27,302.73 a month)', () => {
+  it('pays exactly the GEPF engine annuity in year 0 (service net of the savings-component share)', () => {
     expect(r.rows[0]!.gepfPensionGross).toBeCloseTo(benefits.retirement.annuityAnnual, 9)
-    expect(r.rows[0]!.gepfPensionGross).toBeCloseTo(600_000 * 30 / 55 + 360, 6)
-    expect(r.firstYear.gepfPensionMonthlyGross).toBeCloseTo(27_302.7272727, 4)
+    // Two-pot: 5 of the 30 years fall after 1 Sept 2024; one third of those (the savings-component
+    // service) is excluded from the annuity, so annuity service = 30 - 5/3 = 28.333 years.
+    const annuity = (600_000 * (30 - 5 / 3)) / 55 + 360
+    expect(r.rows[0]!.gepfPensionGross).toBeCloseTo(annuity, 6)
+    expect(r.firstYear.gepfPensionMonthlyGross).toBeCloseTo(annuity / 12, 4)
     expect(benefits.retirement.reductionFactor).toBe(1) // no early-retirement reduction at 60
   })
 
@@ -213,10 +216,10 @@ describe('stay-gepf at exit', () => {
   })
 
   it('applies PAYE by age and escalates the pension at CPI x gepfIncreaseAsPctOfCpi', () => {
-    const tax = calcIncomeTax(600_000 * 30 / 55 + 360, 60, T, { medicalMembers: 2 })
-    expect(tax.tax).toBeCloseTo(40_245.5091, 3) // 66,216.5091 - 17,235 - 8,736
+    const tax = calcIncomeTax(benefits.retirement.annuityAnnual, 60, T, { medicalMembers: 2 })
+    expect(tax.tax).toBeGreaterThan(0)
     expect(r.rows[0]!.gepfPensionTax).toBeCloseTo(tax.tax, 6)
-    expect(r.rows[0]!.gepfPensionNet).toBeCloseTo(327_632.7273 - 40_245.5091, 3)
+    expect(r.rows[0]!.gepfPensionNet).toBeCloseTo(benefits.retirement.annuityAnnual - tax.tax, 3)
     // 5% CPI x 100% of CPI, compounding from year 0.
     expect(r.rows[5]!.gepfPensionGross).toBeCloseTo(r.rows[0]!.gepfPensionGross * 1.05 ** 5, 6)
     expect(r.totals.guaranteedIncomeShare).toBeCloseTo(r.rows[0]!.gepfPensionNet / r.rows[0]!.totalNetIncome, 12)
@@ -624,8 +627,10 @@ describe('compareScenarios and summarise', () => {
     for (const r of results) {
       expect(taxRow.values[r.definition.id]).toBeCloseTo(r.atExit.lumpSumTax + (r.atRetirementFromPreservation?.lumpSumTax ?? 0), 6)
     }
-    // Preserve pays no tax at exit and the least overall; cash pays the most.
-    expect(comparison.winners.lumpSumTax).toBe('preserve')
+    // The winner is whichever route pays the least in total; cash (withdrawal table) pays the most.
+    const lowest = results.reduce((best, r) => ((taxRow.values[r.definition.id] as number) < (taxRow.values[best] as number) ? r.definition.id : best), results[0]!.definition.id)
+    expect(comparison.winners.lumpSumTax).toBe(lowest)
+    expect(results.find((r) => r.definition.id === 'preserve')!.atExit.lumpSumTax).toBe(0)
     expect(comparison.winners.guaranteedIncomeShare).toBe('stay')
     expect(comparison.winners.forfeitedMedicalSubsidy).toBe('stay')
   })

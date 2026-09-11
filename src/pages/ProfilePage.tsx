@@ -4,6 +4,7 @@ import { AboutYouSection } from '../components/profile/AboutYouSection'
 import { GepfSection } from '../components/profile/GepfSection'
 import { LifestyleSection } from '../components/profile/LifestyleSection'
 import { AssumptionsSection } from '../components/profile/AssumptionsSection'
+import ImportExport from '../components/profile/ImportExport'
 
 export default function ProfilePage() {
   const profile = useAppStore((s) => s.profile)
@@ -23,6 +24,7 @@ export default function ProfilePage() {
       <GepfSection profile={profile} onChange={setGepf} onReplaceProfile={replaceProfile} />
       <LifestyleSection lifestyle={profile.lifestyle} onChange={setLifestyle} />
       <AssumptionsSection assumptions={profile.assumptions} onChange={setAssumptions} />
+      <ImportExport />
     </div>
   )
 }

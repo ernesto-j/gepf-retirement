@@ -1,0 +1,10 @@
+{
+  "_notes": ["Example case file for scripts/run-scenarios.ts and the Profile page's 'Save or load this case'. Copy, edit, and keep your own copy out of git (profiles/*.json is ignored)."],
+  "profile": {
+    "person": { "currentAge": 57, "plannedExitAge": 60, "planToAge": 90, "hasSpouse": true, "spouseAge": 55, "spousePensionPct": 50 },
+    "gepf": { "pensionableServiceYearsNow": 30, "pensionableSalaryAnnual": 720000, "salaryGrowth": 0.055, "medicalSubsidyEligible": true, "medicalSubsidyMonthly": 4029, "useStatementValues": false },
+    "lifestyle": { "targetNetMonthlyIncomeToday": 35000, "medicalAidMonthly": 6500, "medicalAidMembers": 2, "otherSavings": 500000, "otherSavingsOffshorePct": 0.2, "onceOffCapitalNeeds": 150000 },
+    "assumptions": { "taxYear": "2026/27", "officialCpi": 0.05, "personalInflation": 0.075, "medicalInflation": 0.095, "gepfIncreaseAsPctOfCpi": 1.0, "usdZarSpot": 16.2, "randDepreciation": 0.05 }
+  },
+  "scenarios": []
+}

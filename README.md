@@ -38,6 +38,7 @@ The single-file build can be opened straight from disk or emailed. Its AI featur
 - **About you**: age, planned exit age, planning horizon (default 90), spouse and spouse-pension election (50% or 75%).
 - **GEPF membership**: pensionable service, pensionable salary and growth, service before 1 September 2024 (two-pot), post-retirement medical subsidy eligibility, previous lump sums (for tax aggregation). Upload a benefit statement to fill these in.
 - **Lifestyle**: target after-tax monthly income in today's rand (or build it from essentials, discretionary, medical aid, housing), other income, other savings and their offshore share, debt, once-off capital needs, legacy goal, and the share of your spending that is import-linked.
+- **Your own investments**: holdings you set up yourself that run alongside every scenario, each with its own currency (ZAR, USD, AUD, GBP, EUR), deposit, optional loan (amortising or interest-only), growth, income yield, running costs, income tax and CGT rates, purchase and selling costs, and an optional fixed term. Presets: S&P 500 UCITS ETF in dollars, Australian residential and commercial property for a non-resident buyer, a fixed-term deposit, other. Net cash counts toward your income (or is reinvested), negative carry is funded from savings, and sale proceeds return to your savings. Assets without a term are held to the horizon and are not sold piecemeal for income.
 - **Assumptions** (with presets): official CPI, personal "true" inflation, medical inflation, GEPF increase as a share of CPI, USD/ZAR spot, rand depreciation, returns (local balanced, cash, offshore in USD), fees, FX cost, living-annuity limits, tax year.
 
 ### GEPF benefits (engine/gepf.ts)
@@ -57,6 +58,10 @@ SARS tables for 2026/27 (the app's default tax year; 2025/26 is also available):
 ### Projection (engine/projection.ts)
 
 Annual steps from the exit age to the horizon. Income target escalates at personal inflation (medical aid at medical inflation). Capital is held in a local sleeve and an offshore sleeve (in USD, valued at spot × (1 + depreciation)^t), rebalanced yearly, net of the chosen fund's all-in fee. Retirement-fund money grows untaxed; discretionary money carries a blended tax drag. Living annuities draw between 2.5% and 17.5% of capital; when the target income needs more than that, the row is marked "capped" and the shortfall is shown. **Ruin age** is the first age at which all investable capital is exhausted; for the stay route the GEPF pension continues regardless. Totals include lifetime tax, fees, present value of net income (today's rand) and legacy at the horizon.
+
+### Funds (engine/funds.ts)
+
+The Funds page compares 23 SA funds on fees and 1, 3, 5, 10 and 20-year and since-launch returns (≈ marks approximate figures), runs the living-annuity route once per fund on the common return assumption and on the fund's own history, and shows growth of R1m over 30 years per fund net of its all-in fee.
 
 ### Rand and inflation (engine/hedge.ts)
 

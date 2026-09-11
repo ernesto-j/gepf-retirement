@@ -4,21 +4,24 @@ import { projectCustomInvestment, summariseInvestment } from '../../../engine/in
 import { Badge, Callout, Field, Grid, KpiTile, NumberInput, P, PercentInput, R, SelectInput, Toggle } from '../../ui'
 import { CURRENCY_OPTIONS, DEFAULT_LOAN, FUNDED_FROM_OPTIONS, INCOME_USE_OPTIONS, KIND_OPTIONS } from './factory'
 import { CurrencyInput } from './CurrencyInput'
+import { formatCcy } from './currency'
 import { OptionalYearsInput } from './OptionalYearsInput'
 import { YearTable } from './YearTable'
 
 function LoanFields({
+  hideAmount = false,
   loan,
   currency,
   onChange,
 }: {
+  hideAmount?: boolean
   loan: CustomInvestmentLoan
   currency: CustomInvestment['currency']
   onChange: (patch: Partial<CustomInvestmentLoan>) => void
 }) {
   return (
     <Grid cols={4} className="mt-3">
-      <CurrencyInput label="Loan amount" currency={currency} value={loan.amount} onChange={(v) => onChange({ amount: v })} />
+      {!hideAmount && <CurrencyInput label="Loan amount" currency={currency} value={loan.amount} onChange={(v) => onChange({ amount: v })} />}
       <PercentInput label="Interest rate" value={loan.rate} min={0} max={0.3} onChange={(v) => onChange({ rate: v })} />
       <NumberInput label="Loan term" suffix="years" value={loan.termYears} min={1} max={40} step={1} onChange={(v) => onChange({ termYears: Math.round(v) })} />
       <div className="flex items-end pb-2">
@@ -78,6 +81,26 @@ export function InvestmentCard({
     if (!investment.loan) return
     onChange({ loan: { ...investment.loan, ...patch } })
   }
+  // Property is entered as purchase price + deposit %; deposit and loan amounts are derived from them.
+  const depositPct = purchasePrice > 0 ? investment.deposit / purchasePrice : 1
+  const setPropertyPrice = (price: number) => {
+    const pct = Math.min(1, Math.max(0, depositPct))
+    const deposit = price * pct
+    const loanAmount = price - deposit
+    onChange({
+      deposit,
+      loan: loanAmount > 0.5 ? { ...(investment.loan ?? DEFAULT_LOAN), amount: loanAmount } : undefined,
+    })
+  }
+  const setDepositPct = (pct: number) => {
+    const clamped = Math.min(1, Math.max(0.05, pct))
+    const deposit = purchasePrice * clamped
+    const loanAmount = purchasePrice - deposit
+    onChange({
+      deposit,
+      loan: loanAmount > 0.5 ? { ...(investment.loan ?? DEFAULT_LOAN), amount: loanAmount } : undefined,
+    })
+  }
 
   return (
     <div className={`card ${investment.enabled ? '' : 'opacity-60'}`}>
@@ -131,13 +154,34 @@ export function InvestmentCard({
           options={FUNDED_FROM_OPTIONS}
           help="'Exit capital' draws the deposit from your lump sum / savings at exit; 'external' is money outside the plan."
         />
-        <CurrencyInput
-          label="Deposit"
-          currency={investment.currency}
-          value={investment.deposit}
-          onChange={(v) => onChange({ deposit: v })}
-          help="Cash put in — the purchase amount less any loan."
-        />
+        {isProperty ? (
+          <>
+            <CurrencyInput
+              label="Purchase price"
+              currency={investment.currency}
+              value={purchasePrice}
+              onChange={setPropertyPrice}
+              help="Price of the property; purchase costs are added on top."
+            />
+            <PercentInput
+              label="Deposit"
+              value={depositPct}
+              min={0.05}
+              max={1}
+              step={1}
+              onChange={setDepositPct}
+              help={`Deposit ${formatCcy(investment.deposit, investment.currency)}; loan ${formatCcy(purchasePrice - investment.deposit, investment.currency)} (LVR ${P(1 - depositPct, 0)}). 100% = no loan.`}
+            />
+          </>
+        ) : (
+          <CurrencyInput
+            label="Deposit"
+            currency={investment.currency}
+            value={investment.deposit}
+            onChange={(v) => onChange({ deposit: v })}
+            help="Cash put in — the purchase amount less any loan."
+          />
+        )}
         <PercentInput
           label="Purchase costs"
           value={investment.purchaseCostPct}
@@ -149,19 +193,22 @@ export function InvestmentCard({
       </Grid>
 
       <div className="mt-4 border-t border-slate-100 pt-3">
-        <Toggle
-          label="Fund part of this with a loan"
-          checked={!!investment.loan}
-          onChange={(v) => onChange({ loan: v ? DEFAULT_LOAN : undefined })}
-          help="Interest and any capital repayments come out of the investment's own income each year."
-        />
-        {investment.loan && <LoanFields loan={investment.loan} currency={investment.currency} onChange={patchLoan} />}
+        {!isProperty && (
+          <Toggle
+            label="Fund part of this with a loan"
+            checked={!!investment.loan}
+            onChange={(v) => onChange({ loan: v ? DEFAULT_LOAN : undefined })}
+            help="Interest and any capital repayments come out of the investment's own income each year."
+          />
+        )}
+        {isProperty && !investment.loan && <p className="help">No loan: the deposit is 100% of the price. Lower the deposit % above to add a mortgage.</p>}
+        {investment.loan && <LoanFields hideAmount={isProperty} loan={investment.loan} currency={investment.currency} onChange={patchLoan} />}
       </div>
 
       <div className="mt-4 border-t border-slate-100 pt-3">
         <Grid cols={3}>
-          <PercentInput label="Growth" value={investment.growth} min={-0.2} max={0.3} onChange={(v) => onChange({ growth: v })} help="Capital growth p.a., in the investment's currency." />
-          <PercentInput label="Income yield" value={investment.incomeYield} min={0} max={0.2} onChange={(v) => onChange({ incomeYield: v })} help="Gross rent / dividends / interest, p.a. on value." />
+          <PercentInput label={isProperty ? 'Capital growth' : 'Growth'} value={investment.growth} min={-0.2} max={0.3} onChange={(v) => onChange({ growth: v })} help="Capital growth p.a., in the investment's currency." />
+          <PercentInput label={isProperty ? 'Rental yield (gross)' : 'Income yield'} value={investment.incomeYield} min={0} max={0.2} onChange={(v) => onChange({ incomeYield: v })} help={isProperty ? 'Annual gross rent as a % of the property value (weekly rent x 52 / price).' : 'Gross rent / dividends / interest, p.a. on value.'} />
           <PercentInput label="Running costs" value={investment.costsPct} min={0} max={0.1} onChange={(v) => onChange({ costsPct: v })} help="Rates, levies, management, vacancy, TER, p.a. on value." />
           <PercentInput label="Income tax" value={investment.incomeTaxRate} min={0} max={0.5} onChange={(v) => onChange({ incomeTaxRate: v })} help="Effective rate on net income." />
           <PercentInput label="Capital gains tax" value={investment.cgtRate} min={0} max={0.5} onChange={(v) => onChange({ cgtRate: v })} help="Effective rate on the gain at sale." />

@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 import type { Assumptions, GepfMembership, LifestyleInputs, PersonProfile, Profile, RiskFlag, ScenarioResult } from '../src/engine/types'
 import { prosCons, riskFlags } from '../src/engine/insights'
 import { defaultScenarios, runScenario } from '../src/engine/projection'
-import { getGepfRules } from '../src/engine/gepf'
+import { gepfBenefitsAtExit, getGepfRules } from '../src/engine/gepf'
 import { getTaxTables } from '../src/engine/tax'
 import { formatRand } from '../src/engine/money'
 import { RISK_LIBRARY } from '../src/data/caseStudies'
@@ -169,9 +169,18 @@ describe('prosCons', () => {
 
   it('names the 1 October 2025 factor cut with both values', () => {
     const cons = prosCons(PRESERVE, PROFILE, RULES).cons.join(' | ')
+    const previous = gepfBenefitsAtExit(PROFILE, PROFILE.person.plannedExitAge, RULES).resignation
+      .actuarialInterestPreviousFactors
+    expect(previous).toBeGreaterThan(0)
+    const cut = 1 - PRESERVE.atExit.actuarialInterest / previous!
     expect(cons).toContain('1 October 2025')
     expect(cons).toContain(rand(PRESERVE.atExit.actuarialInterest))
-    expect(cons).toContain('15.0%') // the 2025 factors are 85% of the 2021 factors
+    expect(cons).toContain(rand(previous!))
+    expect(cons).toContain(`${(cut * 100).toFixed(1)}%`)
+    // GEPF's headline "15% lower on average" is a mean across all ages; the revised curve
+    // (src/data/gepfRules.ts) cuts less near retirement, so this 60-year-old sees well under 15%.
+    expect(cut).toBeGreaterThan(0.05)
+    expect(cut).toBeLessThan(0.15)
   })
 
   it('compares the drawdown rate with the 4–5% sustainable range', () => {

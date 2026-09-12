@@ -810,6 +810,11 @@ describe('runScenario: the capital identity and the untouched baseline', () => {
   it('a scenario with no investments is numerically identical to the pre-feature engine', () => {
     // Snapshot captured by running the engine at the commit BEFORE custom investments existed,
     // on DEFAULT_PROFILE with investments: []. Every figure must still match to the cent.
+    // The `preserve` and `cash` figures were re-captured on 2026-09-12 when the 1 October 2025
+    // actuarial-factor curve was re-anchored to a real 31 March 2026 benefit statement (see
+    // src/data/gepfRules.ts): those two routes are valued off F(Z), so their resignation value
+    // rose ~8%. `stay` never touches F(Z) and is unchanged to the cent from the original capture,
+    // which is what proves the rest of the engine was not disturbed.
     const snapshot: Record<string, Record<string, number | null>> = {
       stay: {
         pvNetIncome: 10007693.642570985,
@@ -825,30 +830,30 @@ describe('runScenario: the capital identity and the untouched baseline', () => {
         incomeShortfallAge: 73,
       },
       preserve: {
-        pvNetIncome: 4710093.189712561,
+        pvNetIncome: 4967673.527749108,
         legacyAtHorizon: 0,
         legacyAtHorizonReal: 0,
-        lifetimeNetIncomeNominal: 9213471.272969846,
-        lifetimeTaxPaid: 1604390.4139330182,
-        lifetimeFeesPaid: 426785.04486024764,
-        investedCapital: 6227441.824159827,
+        lifetimeNetIncomeNominal: 9877369.142550705,
+        lifetimeTaxPaid: 1807263.6993831724,
+        lifetimeFeesPaid: 471279.5006476503,
+        investedCapital: 6607004.026826974,
         firstYearNet: 43939.52167679332,
         firstYearGross: 56661.1015783229,
         ruinAge: 79,
         incomeShortfallAge: 69,
       },
       cash: {
-        pvNetIncome: 3809507.1934149163,
+        pvNetIncome: 4064283.565939692,
         legacyAtHorizon: 0,
         legacyAtHorizonReal: 0,
-        lifetimeNetIncomeNominal: 6406927.588313675,
-        lifetimeTaxPaid: 2103676.932347174,
-        lifetimeFeesPaid: 213837.44700900355,
-        investedCapital: 4474790.825375044,
+        lifetimeNetIncomeNominal: 7002435.039982252,
+        lifetimeTaxPaid: 2258903.356989127,
+        lifetimeFeesPaid: 246816.2625322894,
+        investedCapital: 4730334.89141874,
         firstYearNet: 43939.52137499999,
         firstYearGross: 43939.52137499999,
-        ruinAge: 68,
-        incomeShortfallAge: 68,
+        ruinAge: 69,
+        incomeShortfallAge: 69,
       },
     }
     const empty: Profile = { ...DEFAULT_PROFILE, investments: [] }

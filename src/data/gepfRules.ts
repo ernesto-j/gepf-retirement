@@ -16,10 +16,10 @@ import type { ActuarialFactorTable, GepfRules } from '../engine/types'
  * 0.20431 = R643,576.50). Both examples' dating (1 Sep 2024 and 1 Sep 2025, i.e. both before the
  * 1 Oct 2025 revision) suggests they belong to the 2021 factor basis — not confirmed, per
  * research/gepf-benefit-rules.md open question 1. The full factor table (Appendix 8 of the 2024
- * valuation report) was not retrievable, so the curves below remain ESTIMATES: the 2021 curve is
- * calibrated to pass exactly through both known points (an exponential decay to age 60, matching
- * the shape used previously) and the 2025 curve is 0.85 x the 2021 curve (the confirmed average
- * reduction). Use your benefit statement value when available: it overrides these estimates.
+ * valuation report) was not retrievable, so the curves below remain ESTIMATES, but both are now
+ * anchored to real benefit statements: one dated 31 May 2025 (2021 basis) and one dated
+ * 31 March 2026 (2025 basis). See the calibration block below. Use your own benefit statement value
+ * when available: it overrides these estimates.
  */
 function actuarialCurve(
   ages: number[],
@@ -34,22 +34,64 @@ function actuarialCurve(
 
 const AGES = [20, 25, 30, 35, 40, 41, 45, 50, 55, 58, 60, 62, 65]
 
-// Calibration. Two independent anchors on the 2021 basis:
+// --- 2021 basis. Two independent anchors: -----------------------------------------------------
 //  * F(40) = 0.2036 from the GEPF FAQ example (10 yrs x R300,000 x 0.2036 = R610,800).
-//  * F(62.7) = 0.2629 back-solved from a real GEPF "Estimate of Benefits" dated 31 May 2025 (i.e. on the
-//    2021 factors): total resignation benefit R7,189,401.44 with 25 years 2 months' pensionable service
-//    and a final average salary of R1,086,619.08 -> 7,189,401.44 / (25.1667 x 1,086,619.08) = 0.2629
-//    (member then aged ~62.7). This is a much flatter curve than an extrapolation from the two FAQ
-//    points (40 and 41) implied, so the 62.7 anchor takes precedence for the slope; the FAQ's F(41) =
-//    0.20431 is then reproduced to within 1% (curve gives 0.2059).
-// The z<=60 branch is an exponential through the two anchors; above 60 the same exponential continues
-// (the statement anchor sits above 60), capped at age 65 where compulsory retirement applies.
+//  * F(63.42) = 0.26290 back-solved from a real GEPF "Estimate of Benefits" dated 31 May 2025 (i.e. on
+//    the 2021 factors): total resignation benefit R7,189,401.44 with 25 years 2 months' pensionable
+//    service and a final average salary of R1,086,619.08 -> 7,189,401.44 / (25.1667 x 1,086,619.08) =
+//    0.26290, the member (born 29 Dec 1961) being 63.42 at the statement date. This is a much flatter
+//    curve than an extrapolation from the two FAQ points (40 and 41) implied, so this anchor takes
+//    precedence for the slope; the FAQ's F(41) = 0.20431 is then reproduced to within 1% (0.2058).
+// The curve is an exponential through the two anchors, continued above 60 (both statement anchors sit
+// above 60) and capped at 65, where compulsory retirement applies.
 const ANCHOR_AGE_LOW = 40
 const ANCHOR_FACTOR_LOW = 0.2036
-const ANCHOR_AGE_HIGH = 62.7
+const ANCHOR_AGE_HIGH = 63.42
 const ANCHOR_FACTOR_HIGH = 0.2629
 const DECAY_RATE = Math.log(ANCHOR_FACTOR_HIGH / ANCHOR_FACTOR_LOW) / (ANCHOR_AGE_HIGH - ANCHOR_AGE_LOW)
 const FACTOR_AT_60_2021 = ANCHOR_FACTOR_LOW * Math.exp(DECAY_RATE * (60 - ANCHOR_AGE_LOW))
+
+// --- 2025 basis (effective 1 Oct 2025). Fitted to two facts, both real: ------------------------
+//  * F(64.25) = 0.24674, back-solved from a real "Estimate of Benefits" dated 31 March 2026 — the
+//    first statement seen on the revised basis: resignation benefit R7,358,306.34 with 26 years'
+//    pensionable service and a final average salary of R1,146,998.90, the member being 64.25 at the
+//    statement date. Against the 2021 curve above (0.26525 at that age) that is a reduction of only
+//    7.0%, NOT the 15% previously assumed.
+//  * GEPF's own statement that the revised factors are "on average 15% lower" than the 2021 factors.
+// A uniform haircut cannot satisfy both, so the 2025 curve is a second exponential fitted to do so:
+// it passes through the observed point and its mean ratio to the 2021 curve, across the ages in
+// `AGES`, is 0.85. The resulting curve is steeper than the 2021 one — the reduction runs from about
+// 17% at 40 to 7% at 64 — which is the shape a discount-rate change produces, since a younger
+// member's deferred pension is discounted over more years. That shape is INFERRED, not published:
+// the reduction near retirement is evidence-based, the reduction for members well under 55 is not.
+const ANCHOR_AGE_2025 = 64.25
+const ANCHOR_FACTOR_2025 = 0.24674
+const TARGET_MEAN_RATIO = 0.85
+const factor2021At = (age: number) => FACTOR_AT_60_2021 * Math.exp(DECAY_RATE * (Math.min(age, 65) - 60))
+
+/**
+ * Solves for the 2025 curve's decay rate: the rate at which an exponential through
+ * (ANCHOR_AGE_2025, ANCHOR_FACTOR_2025) has a mean ratio of TARGET_MEAN_RATIO to the 2021 curve over
+ * `AGES`. The mean ratio falls monotonically as the rate rises, so a bisection converges.
+ */
+function solveDecayRate2025(): number {
+  const meanRatio = (rate: number): number => {
+    const at60 = ANCHOR_FACTOR_2025 / Math.exp(rate * (Math.min(ANCHOR_AGE_2025, 65) - 60))
+    const ratios = AGES.map((age) => (at60 * Math.exp(rate * (Math.min(age, 65) - 60))) / factor2021At(age))
+    return ratios.reduce((a, b) => a + b, 0) / ratios.length
+  }
+  let lo = DECAY_RATE // same shape as 2021 (a uniform haircut): mean ratio above the target
+  let hi = DECAY_RATE + 0.2 // far steeper than needed: mean ratio below the target
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2
+    if (meanRatio(mid) > TARGET_MEAN_RATIO) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+const DECAY_RATE_2025 = solveDecayRate2025()
+const FACTOR_AT_60_2025 = ANCHOR_FACTOR_2025 / Math.exp(DECAY_RATE_2025 * (ANCHOR_AGE_2025 - 60))
 
 const FACTORS_2021: ActuarialFactorTable = {
   label: 'GEPF actuarial interest factors, 2021 basis (effective 1 Nov 2022) — anchored to a FAQ example and a real May 2025 statement',
@@ -58,18 +100,18 @@ const FACTORS_2021: ActuarialFactorTable = {
   source: 'https://www.gepf.co.za/frequently-asked-questions/',
   confidence: 'medium',
   note:
-    'Anchored at the GEPF FAQ example F(40) = 0.2036 and at F(62.7) = 0.2629 back-solved from a real 31 May 2025 benefit statement (2021 basis); the FAQ F(41) = 0.20431 is reproduced within 1%. The shape between and beyond the anchors is an exponential estimate — the published Appendix 8 table was not retrievable. Replace with the full table if it becomes available.',
+    'Anchored at the GEPF FAQ example F(40) = 0.2036 and at F(63.42) = 0.2629 back-solved from a real 31 May 2025 benefit statement (2021 basis); the FAQ F(41) = 0.20431 is reproduced within 1%. The shape between and beyond the anchors is an exponential estimate — the published Appendix 8 table was not retrievable. Replace with the full table if it becomes available.',
 }
 
 const FACTORS_2025: ActuarialFactorTable = {
-  label: 'GEPF actuarial interest factors effective 1 Oct 2025 — estimated (15% below 2021, GEPF-confirmed average)',
+  label: 'GEPF actuarial interest factors effective 1 Oct 2025 — anchored to a real March 2026 statement',
   effectiveFrom: '2025-10-01',
-  points: actuarialCurve(AGES, FACTOR_AT_60_2021 * 0.85, DECAY_RATE),
+  points: actuarialCurve(AGES, FACTOR_AT_60_2025, DECAY_RATE_2025),
   source:
     'https://gepf.co.za/clarification-on-the-implementation-of-revised-actuarialinterest-factors-as-at-1-october-2025/',
-  confidence: 'low',
+  confidence: 'medium',
   note:
-    'GEPF confirms the revised factors are on average 15% lower than the 2021 factors (high confidence), but the per-age shape of the new curve is not published, so this table applies that 15% haircut uniformly to the (already-estimated) 2021 curve. Use your benefit statement value when available — it overrides this estimate.',
+    'Fitted to two real facts: F(64.25) = 0.24674 back-solved from a 31 March 2026 benefit statement (the first seen on the revised basis, a 7.0% reduction at that age, not 15%), and GEPF\'s own "on average 15% lower" statement, which the curve reproduces as a mean across the tabulated ages. The reduction therefore runs from about 17% at 40 to 7% at 64. Near retirement this is evidence-based; below 55 the shape is inferred, not published. Use your own benefit statement value when available — it overrides this estimate.',
 }
 
 export const GEPF_RULES: GepfRules = {

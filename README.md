@@ -47,7 +47,7 @@ The single-file build can be opened straight from disk or emailed. Its AI featur
 - 10+ years' service: gratuity = 6.72% × final salary × service; annuity = final salary × service ÷ 55 + R360 a year.
 - Under 10 years: no pension; the actuarial interest (service × final salary × F(age)) is paid as a once-off gratuity.
 - Early retirement between 55 and 60 without employer approval: ⅓% reduction per month before 60.
-- Resignation at any age: actuarial interest = pensionable service × final salary × age-dependent factor F(age) (GEPF Rule 14.4), using the factors the GEPF introduced on **1 October 2025** (on average ~15% lower than the 2021 factors). The value under the previous factors is shown for comparison.
+- Resignation at any age: actuarial interest = pensionable service × final salary × age-dependent factor F(age) (GEPF Rule 14.4), using the factors the GEPF introduced on **1 October 2025**. GEPF says these are on average 15% lower than the 2021 factors, but a real benefit statement dated 31 March 2026 (the first seen on the revised basis) puts the cut at only 7% at age 64, so the curve in `src/data/gepfRules.ts` is fitted to both facts: it passes through that observed point and averages 15% below the 2021 curve across all tabulated ages, which makes the reduction run from about 17% at 40 to 7% at 64. The value under the previous factors is shown for comparison.
 - DPSA early-retirement (ERP, 55–59: reduction waived plus 2 weeks' salary per year for the first 20 years, 1 week thereafter) and voluntary-exit (VEP, 60–63: 2 weeks per year for the first 10 years, 1 week thereafter) programme incentives, taxed as severance benefits, when selected on the Profile page (Circular 38 of 2025; exits by 31 March 2027).
 - Two-pot split of the actuarial interest: vested (pre-September-2024 accrual, less the 10%/R30,000 seed), savings (seed + ⅓ of later accrual) and retirement (⅔ of later accrual). On resignation you may cash the vested and savings components; the retirement component must be preserved.
 
@@ -77,7 +77,7 @@ All data files in `src/data/` carry `asOf` dates and source URLs. Fund returns m
 
 ## Limitations
 
-- The GEPF's actuarial factors are approximated unless you enter your statement value.
+- The GEPF's actuarial factors are approximated unless you enter your statement value. The published table (Appendix 8 of the 2024 valuation) is not available; the curves are anchored to two real benefit statements and a GEPF FAQ example, so they are most reliable near retirement and least reliable below 55.
 - Tax tables are for the selected tax year only; future budgets will change them.
 - Returns and exchange rates are deterministic assumptions, not forecasts; use the sensitivities and presets.
 - Medical-subsidy rules differ by employer and service; check your own eligibility.
